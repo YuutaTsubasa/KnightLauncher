@@ -1,11 +1,30 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DisplayInfo, Game, GameLibrary } from './types';
+import { emit } from '@tauri-apps/api/event';
+import type {
+  AppSettings,
+  DisplayInfo,
+  Game,
+  GameLibrary,
+  GoogleImageResult,
+  SteamGridDbArtwork,
+  SteamGridDbGame
+} from './types';
 
 const isTauri = '__TAURI_INTERNALS__' in window;
 
 export async function loadLibrary(): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('load_library');
+}
+
+export async function loadSettings(): Promise<AppSettings> {
+  if (!isTauri) return { steamgriddbApiKey: null, googleApiKey: null, googleSearchEngineId: null };
+  return invoke<AppSettings>('load_settings');
+}
+
+export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
+  if (!isTauri) return settings;
+  return invoke<AppSettings>('save_settings', { settings });
 }
 
 export async function saveLibrary(library: GameLibrary): Promise<GameLibrary> {
@@ -26,6 +45,16 @@ export async function removeGame(id: string): Promise<GameLibrary> {
 export async function selectExecutable(): Promise<Game | null> {
   if (!isTauri) return demoGames[0];
   return invoke<Game | null>('select_executable');
+}
+
+export async function selectExecutablePath(): Promise<string | null> {
+  if (!isTauri) return 'C:\\Games\\Example\\game.exe';
+  return invoke<string | null>('select_executable_path');
+}
+
+export async function selectImagePath(): Promise<string | null> {
+  if (!isTauri) return null;
+  return invoke<string | null>('select_image_path');
 }
 
 export async function selectFolder(): Promise<string | null> {
@@ -53,6 +82,70 @@ export async function detectDisplays(): Promise<DisplayInfo[]> {
   return invoke<DisplayInfo[]>('detect_displays');
 }
 
+export async function arrangeDisplays(): Promise<void> {
+  if (!isTauri) return;
+  return invoke<void>('arrange_displays');
+}
+
+export async function swapDisplays(): Promise<void> {
+  if (!isTauri) return;
+  return invoke<void>('swap_displays');
+}
+
+export async function notifyLibraryChanged(): Promise<void> {
+  if (!isTauri) return;
+  return emit('library-changed');
+}
+
+export async function steamGridDbSearchGames(query: string): Promise<SteamGridDbGame[]> {
+  if (!isTauri) {
+    return [
+      { id: 1245, name: query || 'Elden Ring', types: ['game'], verified: true },
+      { id: 1246, name: `${query || 'Elden Ring'} Deluxe`, types: ['game'], verified: false }
+    ];
+  }
+  return invoke<SteamGridDbGame[]>('steamgriddb_search_games', { query });
+}
+
+export async function steamGridDbGameArtwork(gameId: number): Promise<SteamGridDbArtwork> {
+  if (!isTauri) {
+    return {
+      covers: [],
+      heroes: [],
+      logos: [],
+      icons: []
+    };
+  }
+  return invoke<SteamGridDbArtwork>('steamgriddb_game_artwork', { gameId });
+}
+
+export async function steamGridDbDownloadArtwork(url: string, kind: string, gameId: string): Promise<string> {
+  if (!isTauri) return url;
+  return invoke<string>('steamgriddb_download_artwork', { url, kind, gameId });
+}
+
+export async function googleImageSearch(query: string): Promise<GoogleImageResult[]> {
+  if (!isTauri) {
+    return [
+      {
+        title: `${query || 'Game'} artwork`,
+        link: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f',
+        thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=320',
+        contextLink: 'https://unsplash.com',
+        width: 1600,
+        height: 1067,
+        mime: 'image/jpeg'
+      }
+    ];
+  }
+  return invoke<GoogleImageResult[]>('google_image_search', { query });
+}
+
+export async function googleDownloadArtwork(url: string, kind: string, gameId: string): Promise<string> {
+  if (!isTauri) return url;
+  return invoke<string>('google_download_artwork', { url, kind, gameId });
+}
+
 const demoGames: Game[] = [
   {
     id: 'demo-elden-ring',
@@ -62,6 +155,7 @@ const demoGames: Game[] = [
     workingDirectory: 'C:\\Games\\Elden Ring',
     coverImage: null,
     heroImage: null,
+    logoImage: null,
     favorite: true,
     lastPlayedAt: '2026-05-02T14:20:00Z',
     playCount: 18,
@@ -77,6 +171,7 @@ const demoGames: Game[] = [
     workingDirectory: 'C:\\Games\\Hades II',
     coverImage: null,
     heroImage: null,
+    logoImage: null,
     favorite: false,
     lastPlayedAt: '2026-04-28T10:00:00Z',
     playCount: 7,
@@ -92,6 +187,7 @@ const demoGames: Game[] = [
     workingDirectory: 'C:\\Games\\Cyberpunk 2077\\bin\\x64',
     coverImage: null,
     heroImage: null,
+    logoImage: null,
     favorite: false,
     lastPlayedAt: null,
     playCount: 0,

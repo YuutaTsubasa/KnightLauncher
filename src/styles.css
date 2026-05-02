@@ -41,6 +41,39 @@ main {
     linear-gradient(135deg, #f8faf9 0%, #eef4f6 46%, #f7f4ed 100%);
 }
 
+main.detail-only,
+main.library-only {
+  grid-template-rows: 1fr;
+}
+
+main.detail-only .bottom-display,
+main.library-only .top-display {
+  display: none;
+}
+
+main.detail-only .top-display,
+main.library-only .bottom-display {
+  min-height: 100vh;
+}
+
+main.library-only .bottom-display {
+  padding: 28px 32px;
+}
+
+main.library-only .game-grid {
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 26px 22px;
+}
+
+main.detail-only h1 {
+  font-size: clamp(3.4rem, 9vh, 7.2rem);
+}
+
+main.detail-only .hero-logo {
+  max-width: min(66vw, 920px);
+  max-height: min(52vh, 520px);
+}
+
 .top-display {
   position: relative;
   display: flex;
@@ -50,8 +83,7 @@ main {
   padding: 22px 28px;
   overflow: hidden;
   background:
-    linear-gradient(90deg, rgba(248, 250, 249, 0.98), rgba(248, 250, 249, 0.72)),
-    radial-gradient(circle at 78% 26%, rgba(255, 200, 87, 0.24), transparent 32%),
+    linear-gradient(90deg, rgba(248, 250, 249, 0.36), rgba(248, 250, 249, 0.12)),
     linear-gradient(135deg, #ffffff 0%, #eef5f6 52%, #f7efe4 100%);
   background-position: center;
   background-size: cover;
@@ -60,16 +92,18 @@ main {
 
 .top-display::after {
   position: absolute;
-  inset: auto 0 0;
-  height: 80px;
+  inset: 0;
+  height: auto;
   content: "";
-  background: linear-gradient(transparent, rgba(239, 245, 246, 0.7));
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.3), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(239, 245, 246, 0.34));
   pointer-events: none;
 }
 
 .status-bar,
 .hero-copy,
-.detail-strip {
+.achievement-slot {
   position: relative;
   z-index: 1;
 }
@@ -77,7 +111,6 @@ main {
 .status-bar,
 .brand,
 .display-pill,
-.hero-actions,
 .clean-actions,
 .notice,
 .panel-row {
@@ -107,8 +140,12 @@ main {
 }
 
 .hero-copy {
+  display: grid;
+  width: 100%;
   max-width: 760px;
-  margin: auto 0 20px;
+  place-items: center;
+  margin: auto;
+  text-align: center;
 }
 
 .eyebrow {
@@ -135,6 +172,15 @@ h1 {
   line-height: 0.95;
   letter-spacing: 0;
   overflow-wrap: anywhere;
+  text-shadow: 0 14px 36px rgba(255, 255, 255, 0.62);
+}
+
+.hero-logo {
+  display: block;
+  max-width: min(62vw, 760px);
+  max-height: min(44vh, 420px);
+  object-fit: contain;
+  filter: drop-shadow(0 22px 42px rgba(21, 32, 38, 0.22));
 }
 
 .hero-copy p {
@@ -145,36 +191,11 @@ h1 {
   line-height: 1.55;
 }
 
-.hero-actions {
-  gap: 10px;
-  margin-top: 22px;
-}
-
-.primary-action,
 .icon-action,
 .control-rail button,
 .segmented button,
 .game-card {
   cursor: pointer;
-}
-
-.primary-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-height: 44px;
-  padding: 0 18px;
-  color: #251800;
-  font-weight: 900;
-  background: #ffc857;
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(255, 200, 87, 0.2);
-}
-
-.primary-action:disabled {
-  cursor: default;
-  opacity: 0.45;
 }
 
 .icon-action {
@@ -192,22 +213,6 @@ h1 {
   color: #c0444d;
 }
 
-.detail-strip {
-  display: grid;
-  grid-template-columns: 150px 110px minmax(0, 1fr);
-  gap: 10px;
-  max-width: 940px;
-}
-
-.detail-strip div {
-  min-width: 0;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(21, 32, 38, 0.09);
-  border-radius: 8px;
-}
-
-.detail-strip span,
 .library-header p,
 .game-meta span {
   display: block;
@@ -215,15 +220,23 @@ h1 {
   font-size: 0.78rem;
 }
 
-.detail-strip strong {
-  display: block;
-  overflow: hidden;
-  color: #152026;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.achievement-slot {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  color: rgba(36, 92, 100, 0.48);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(95, 158, 170, 0.16);
+  border-radius: 8px;
+  backdrop-filter: blur(14px);
 }
 
 .bottom-display {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
@@ -278,6 +291,11 @@ h1 {
 
 .clean-actions button {
   cursor: pointer;
+}
+
+.clean-actions button:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .clean-actions button.active {
@@ -416,6 +434,321 @@ h1 {
   color: #152026;
 }
 
+.edit-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  width: min(520px, calc(100% - 36px));
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(21, 32, 38, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(75, 92, 99, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.edit-panel-header,
+.edit-actions,
+.path-row {
+  display: flex;
+  align-items: center;
+}
+
+.edit-panel-header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-panel-header p {
+  color: rgba(21, 32, 38, 0.52);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.edit-panel-header h3 {
+  max-width: 380px;
+  overflow: hidden;
+  color: #152026;
+  font-size: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.edit-form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.edit-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.edit-form .wide {
+  grid-column: 1 / -1;
+}
+
+.edit-form span {
+  color: rgba(21, 32, 38, 0.58);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.edit-form input,
+.edit-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  color: #152026;
+  background: rgba(245, 247, 248, 0.9);
+  border: 1px solid rgba(21, 32, 38, 0.12);
+  border-radius: 8px;
+  outline: 0;
+}
+
+.edit-form textarea {
+  resize: vertical;
+}
+
+.path-row {
+  gap: 8px;
+}
+
+.path-row button,
+.path-row select,
+.edit-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #245c64;
+  background: rgba(128, 221, 224, 0.18);
+  border: 1px solid rgba(95, 158, 170, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.path-row select {
+  min-width: 92px;
+  outline: 0;
+}
+
+.edit-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.edit-actions button.save {
+  color: #251800;
+  font-weight: 900;
+  background: #ffc857;
+  border-color: rgba(255, 200, 87, 0.6);
+}
+
+.artwork-picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(245, 247, 248, 0.72);
+  border: 1px solid rgba(21, 32, 38, 0.1);
+  border-radius: 8px;
+}
+
+.artwork-heading,
+.source-tabs,
+.sgdb-games {
+  display: flex;
+  align-items: center;
+}
+
+.artwork-heading {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.artwork-heading div {
+  display: grid;
+  gap: 2px;
+}
+
+.artwork-heading .source-tabs {
+  display: flex;
+}
+
+.artwork-heading strong {
+  color: #152026;
+  font-size: 0.96rem;
+}
+
+.source-tabs button,
+.sgdb-games button,
+.artwork-grid button {
+  cursor: pointer;
+}
+
+.source-tabs {
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(21, 32, 38, 0.08);
+  border-radius: 8px;
+}
+
+.source-tabs button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: #245c64;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.source-tabs button.selected {
+  color: #251800;
+  background: #ffc857;
+}
+
+.artwork-message {
+  padding: 9px 10px;
+  color: #245c64;
+  font-size: 0.82rem;
+  background: rgba(128, 221, 224, 0.18);
+  border-radius: 8px;
+}
+
+.artwork-message.error {
+  color: #9d3039;
+  background: rgba(226, 88, 74, 0.12);
+}
+
+.sgdb-games {
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.sgdb-games button {
+  flex: 0 0 auto;
+  max-width: 190px;
+  min-height: 32px;
+  overflow: hidden;
+  padding: 0 10px;
+  color: rgba(21, 32, 38, 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(21, 32, 38, 0.1);
+  border-radius: 8px;
+}
+
+.sgdb-games button.selected {
+  color: #251800;
+  background: #ffc857;
+  border-color: rgba(255, 200, 87, 0.72);
+}
+
+.artwork-section {
+  display: grid;
+  gap: 8px;
+}
+
+.artwork-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 8px;
+}
+
+.artwork-grid button {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(21, 32, 38, 0.1);
+  border-radius: 8px;
+}
+
+.artwork-grid button:hover,
+.artwork-grid button:focus-visible {
+  border-color: #ffc857;
+  box-shadow: 0 0 0 2px rgba(255, 200, 87, 0.42);
+  outline: 0;
+}
+
+.artwork-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.artwork-grid.square button {
+  aspect-ratio: 1;
+}
+
+.artwork-grid.wide {
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
+.artwork-grid.wide button {
+  aspect-ratio: 16 / 9;
+}
+
+.artwork-grid.logo {
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
+.artwork-grid.logo button {
+  aspect-ratio: 3 / 1.25;
+  padding: 8px;
+}
+
+.artwork-grid.logo img {
+  object-fit: contain;
+}
+
+.artwork-grid.google {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+.artwork-grid.google button {
+  position: relative;
+  aspect-ratio: 1;
+}
+
+.artwork-grid.google small {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  padding: 3px 5px;
+  color: #152026;
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.76);
+  border-radius: 6px;
+}
+
 @media (max-width: 920px) {
   main {
     grid-template-rows: minmax(280px, 42vh) minmax(420px, 58vh);
@@ -426,12 +759,22 @@ h1 {
     flex-direction: column;
   }
 
-  .detail-strip {
-    grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 760px) {
+  .edit-panel {
+    left: 14px;
+    right: 14px;
+    width: auto;
   }
 
-  .detail-strip div:last-child {
-    grid-column: 1 / -1;
+  .edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .path-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

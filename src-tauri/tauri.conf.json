@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "KnightLauncher",
+        "url": "index.html?window=library",
         "width": 1280,
         "height": 800,
         "minWidth": 960,

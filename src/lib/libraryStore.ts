@@ -4,6 +4,7 @@ import {
   detectDisplays,
   launchGame,
   loadLibrary,
+  notifyLibraryChanged,
   removeGame,
   saveLibrary,
   scanFolder,
@@ -75,6 +76,21 @@ export async function initializeLibrary() {
   }
 }
 
+export async function refreshLibraryPreservingSelection() {
+  try {
+    const currentSelectedId = get(selectedId);
+    const library = await loadLibrary();
+    games.set(library.games);
+    selectedId.set(
+      library.games.some((game) => game.id === currentSelectedId)
+        ? currentSelectedId
+        : (library.games[0]?.id ?? null)
+    );
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
 export async function addExecutable() {
   busyLabel.set('Adding executable');
   errorMessage.set(null);
@@ -86,6 +102,7 @@ export async function addExecutable() {
     const library = await upsertGame(game);
     games.set(library.games);
     selectedId.set(game.id);
+    notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
   } finally {
@@ -110,6 +127,7 @@ export async function scanForGames() {
     const library = await saveLibrary({ games: nextGames });
     games.set(library.games);
     selectedId.set(foundGames[0]?.id ?? library.games[0]?.id ?? null);
+    notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
   } finally {
@@ -122,6 +140,21 @@ export async function toggleFavorite(game: Game) {
   const library = await upsertGame(nextGame);
   games.set(library.games);
   selectedId.set(nextGame.id);
+  notifyLibraryChanged().catch(() => {});
+}
+
+export async function saveGameEdits(game: Game) {
+  errorMessage.set(null);
+
+  try {
+    const library = await upsertGame(game);
+    games.set(library.games);
+    selectedId.set(game.id);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  }
 }
 
 export async function deleteSelectedGame() {
@@ -131,6 +164,7 @@ export async function deleteSelectedGame() {
   const library = await removeGame(id);
   games.set(library.games);
   selectedId.set(library.games[0]?.id ?? null);
+  notifyLibraryChanged().catch(() => {});
 }
 
 export async function launchSelectedGame() {
@@ -144,6 +178,7 @@ export async function launchSelectedGame() {
     const library = await launchGame(game.id);
     games.set(library.games);
     selectedId.set(game.id);
+    notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
   } finally {
