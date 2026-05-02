@@ -1,0 +1,28 @@
+{
+  "name": "knightlauncher",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.5.0",
+    "lucide-svelte": "^0.511.0",
+    "svelte": "^5.33.14"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.0",
+    "@tsconfig/svelte": "^5.0.4",
+    "@tauri-apps/cli": "^2.5.0",
+    "svelte-check": "^4.2.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
