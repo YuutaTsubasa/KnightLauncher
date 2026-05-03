@@ -5,6 +5,21 @@ import dsSymbol from '../assets/platforms/ds.png';
 import threedsSymbol from '../assets/platforms/3ds.png';
 import wiiSymbol from '../assets/platforms/wii.png';
 import wiiuSymbol from '../assets/platforms/wiiu.png';
+import sfcSymbol from '../assets/platforms/sfc.png';
+import fcSymbol from '../assets/platforms/fc.png';
+import n64Symbol from '../assets/platforms/n64.png';
+import gbSymbol from '../assets/platforms/gb.png';
+import gbcSymbol from '../assets/platforms/gbc.png';
+import gbaSymbol from '../assets/platforms/gba.png';
+import gcSymbol from '../assets/platforms/gc.png';
+import switchSymbol from '../assets/platforms/switch.png';
+import ggSymbol from '../assets/platforms/GG.png';
+import ngpcSymbol from '../assets/platforms/ngpc.png';
+import psxSymbol from '../assets/platforms/psx.png';
+import ps2Symbol from '../assets/platforms/ps2.png';
+import pspSymbol from '../assets/platforms/psp.png';
+import vitaSymbol from '../assets/platforms/vita.png';
+import androidSymbol from '../assets/platforms/android.png';
 
 export type PlatformIcon =
   | { kind: 'svg'; viewBox: string; path: string }
@@ -91,6 +106,111 @@ export const PLATFORMS: Platform[] = [
     icon: { kind: 'png', src: wiiuSymbol }
   },
   {
+    id: 'fc',
+    label: 'Famicom / NES',
+    color1: '#E89357',
+    color2: '#F0C062',
+    icon: { kind: 'png', src: fcSymbol }
+  },
+  {
+    id: 'sfc',
+    label: 'Super Famicom / SNES',
+    color1: '#D5407F',
+    color2: '#A576B4',
+    icon: { kind: 'png', src: sfcSymbol }
+  },
+  {
+    id: 'n64',
+    label: 'Nintendo 64',
+    color1: '#5B7E47',
+    color2: '#B85040',
+    icon: { kind: 'png', src: n64Symbol }
+  },
+  {
+    id: 'gc',
+    label: 'GameCube',
+    color1: '#7E72FF',
+    color2: '#B5A7FF',
+    icon: { kind: 'png', src: gcSymbol }
+  },
+  {
+    id: 'gb',
+    label: 'Game Boy',
+    color1: '#9CC9A2',
+    color2: '#B5D5C0',
+    icon: { kind: 'png', src: gbSymbol }
+  },
+  {
+    id: 'gbc',
+    label: 'Game Boy Color',
+    color1: '#D8C926',
+    color2: '#B6CE3F',
+    icon: { kind: 'png', src: gbcSymbol }
+  },
+  {
+    id: 'gba',
+    label: 'Game Boy Advance',
+    color1: '#7176C8',
+    color2: '#A5A8E2',
+    icon: { kind: 'png', src: gbaSymbol }
+  },
+  {
+    id: 'switch',
+    label: 'Switch',
+    color1: '#FF3030',
+    color2: '#E04040',
+    icon: { kind: 'png', src: switchSymbol }
+  },
+  {
+    id: 'gg',
+    label: 'Game Gear',
+    color1: '#D5C700',
+    color2: '#B6CD2D',
+    icon: { kind: 'png', src: ggSymbol }
+  },
+  {
+    id: 'ngpc',
+    label: 'Neo Geo Pocket',
+    color1: '#C97A78',
+    color2: '#A6BB95',
+    icon: { kind: 'png', src: ngpcSymbol }
+  },
+  {
+    id: 'ps1',
+    label: 'PlayStation',
+    color1: '#A8A2D5',
+    color2: '#B6B3DD',
+    icon: { kind: 'png', src: psxSymbol }
+  },
+  {
+    id: 'ps2',
+    label: 'PlayStation 2',
+    color1: '#5A47E0',
+    color2: '#7E58E8',
+    icon: { kind: 'png', src: ps2Symbol }
+  },
+  {
+    id: 'psp',
+    label: 'PSP',
+    color1: '#D940DC',
+    color2: '#A744D8',
+    icon: { kind: 'png', src: pspSymbol }
+  },
+  {
+    id: 'vita',
+    label: 'PS Vita',
+    color1: '#7E78E0',
+    color2: '#5F8CDB',
+    icon: { kind: 'png', src: vitaSymbol }
+  },
+  {
+    id: 'android',
+    label: 'Android',
+    color1: '#3FD6A2',
+    color2: '#85DDB6',
+    icon: { kind: 'png', src: androidSymbol }
+  },
+  {
     id: 'other',
     label: 'Other',
     color1: '#4B5563',
@@ -134,7 +254,52 @@ const aliasMap: Record<string, string> = {
   'nintendo wii': 'wii',
   wiiu: 'wiiu',
   'wii u': 'wiiu',
-  'nintendo wii u': 'wiiu'
+  'nintendo wii u': 'wiiu',
+  fc: 'fc',
+  famicom: 'fc',
+  nes: 'fc',
+  'nintendo entertainment system': 'fc',
+  sfc: 'sfc',
+  snes: 'sfc',
+  'super famicom': 'sfc',
+  'super nintendo': 'sfc',
+  n64: 'n64',
+  'nintendo 64': 'n64',
+  gc: 'gc',
+  gamecube: 'gc',
+  'nintendo gamecube': 'gc',
+  gb: 'gb',
+  'game boy': 'gb',
+  gameboy: 'gb',
+  gbc: 'gbc',
+  'game boy color': 'gbc',
+  gameboycolor: 'gbc',
+  gba: 'gba',
+  'game boy advance': 'gba',
+  gameboyadvance: 'gba',
+  switch: 'switch',
+  'nintendo switch': 'switch',
+  gg: 'gg',
+  gamegear: 'gg',
+  'game gear': 'gg',
+  'sega game gear': 'gg',
+  ngp: 'ngpc',
+  ngpc: 'ngpc',
+  'neo geo pocket': 'ngpc',
+  'neo geo pocket color': 'ngpc',
+  ps1: 'ps1',
+  psx: 'ps1',
+  playstation: 'ps1',
+  'playstation 1': 'ps1',
+  ps2: 'ps2',
+  'playstation 2': 'ps2',
+  psp: 'psp',
+  'playstation portable': 'psp',
+  vita: 'vita',
+  psvita: 'vita',
+  'ps vita': 'vita',
+  'playstation vita': 'vita',
+  android: 'android'
 };
 
 export function resolvePlatform(name: string | null | undefined): Platform {
