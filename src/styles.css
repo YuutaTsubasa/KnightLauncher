@@ -622,6 +622,71 @@ h1 {
   white-space: nowrap;
 }
 
+.variant-label-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  color: #152026;
+  font-size: 0.92rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(21, 32, 38, 0.12);
+  border-radius: 6px;
+  outline: 0;
+}
+
+.variant-label-input:focus {
+  border-color: rgba(255, 200, 87, 0.85);
+  box-shadow: 0 0 0 2px rgba(255, 200, 87, 0.32);
+}
+
+.variant-ra {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #245c64;
+  font-weight: 700;
+}
+
+.variant-edit-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.variant-edit-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  color: #245c64;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: rgba(128, 221, 224, 0.16);
+  border: 1px solid rgba(95, 158, 170, 0.22);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.variant-edit-actions button:hover {
+  background: rgba(128, 221, 224, 0.3);
+}
+
+.variant-ra-search {
+  display: grid;
+  gap: 8px;
+  margin: -4px 0 4px;
+  padding: 10px;
+  background: rgba(255, 200, 87, 0.08);
+  border: 1px dashed rgba(255, 200, 87, 0.5);
+  border-radius: 6px;
+}
+
 .merge-section {
   display: grid;
   gap: 10px;

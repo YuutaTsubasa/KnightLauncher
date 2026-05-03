@@ -36,6 +36,8 @@ pub struct GameVariant {
     pub rom_path: String,
     pub last_played_at: Option<String>,
     pub play_count: u32,
+    #[serde(default)]
+    pub retro_achievements: Option<RetroAchievementsLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -628,7 +630,19 @@ fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<Child, String> {
         .map_err(|error| format!("Unable to launch ROM: {error}"))
 }
 
-fn handoff_focus_to_child(app: &AppHandle, mut child: Child, game_id: String) {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GameFinishedPayload {
+    game_id: String,
+    variant_id: Option<String>,
+}
+
+fn handoff_focus_to_child(
+    app: &AppHandle,
+    mut child: Child,
+    game_id: String,
+    variant_id: Option<String>,
+) {
     if let Some(window) = app.get_webview_window(LIBRARY_WINDOW) {
         let _ = window.minimize();
     }
@@ -646,7 +660,13 @@ fn handoff_focus_to_child(app: &AppHandle, mut child: Child, game_id: String) {
         if let Some(window) = handle.get_webview_window(DETAIL_WINDOW) {
             let _ = window.unminimize();
         }
-        let _ = handle.emit("game-finished", game_id);
+        let _ = handle.emit(
+            "game-finished",
+            GameFinishedPayload {
+                game_id,
+                variant_id,
+            },
+        );
     });
 }
 
@@ -696,7 +716,11 @@ fn ra_get<T: for<'de> Deserialize<'de>>(
 ) -> Result<T, String> {
     let (user, api_key) = ra_credentials(app)?;
     let url = format!("https://retroachievements.org/API/{endpoint}");
-    let mut params: Vec<(&str, &str)> = vec![("z", user.as_str()), ("y", api_key.as_str())];
+    let mut params: Vec<(&str, &str)> = vec![
+        ("z", user.as_str()),
+        ("u", user.as_str()),
+        ("y", api_key.as_str()),
+    ];
     params.extend_from_slice(extra_params);
 
     let response = http_client()?
@@ -977,6 +1001,107 @@ fn retroachievements_unlink(app: AppHandle, game_id: String) -> Result<Library, 
         .position(|game| game.id == game_id)
         .ok_or_else(|| "Game not found.".to_string())?;
     library.games[idx].retro_achievements = None;
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn retroachievements_link_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+    ra_game_id: u32,
+) -> Result<Library, String> {
+    let link = ra_fetch_link(&app, ra_game_id)?;
+    let mut library = read_library_from_disk(&app)?;
+    let game_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let variant_idx = library.games[game_idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+    library.games[game_idx].variants[variant_idx].retro_achievements = Some(link);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn retroachievements_refresh_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let game_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let variant_idx = library.games[game_idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+    let ra_game_id = library.games[game_idx].variants[variant_idx]
+        .retro_achievements
+        .as_ref()
+        .map(|link| link.game_id)
+        .ok_or_else(|| "Variant is not linked to RetroAchievements.".to_string())?;
+    let link = ra_fetch_link(&app, ra_game_id)?;
+    library.games[game_idx].variants[variant_idx].retro_achievements = Some(link);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn retroachievements_unlink_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let game_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let variant_idx = library.games[game_idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+    library.games[game_idx].variants[variant_idx].retro_achievements = None;
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn rename_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+    label: String,
+) -> Result<Library, String> {
+    let trimmed = label.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("Variant label cannot be empty.".to_string());
+    }
+    let mut library = read_library_from_disk(&app)?;
+    let game_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let variant_idx = library.games[game_idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+    library.games[game_idx].variants[variant_idx].label = trimmed;
     write_library_to_disk(&app, &library)?;
     Ok(library)
 }
@@ -1487,7 +1612,7 @@ fn launch_game(app: AppHandle, id: String) -> Result<Library, String> {
         .spawn()
         .map_err(|error| format!("Unable to launch {}: {error}", game.title))?;
     let game_id = game.id.clone();
-    handoff_focus_to_child(&app, child, game_id);
+    handoff_focus_to_child(&app, child, game_id, None);
 
     game.last_played_at = Some(Utc::now().to_rfc3339());
     game.play_count = game.play_count.saturating_add(1);
@@ -1584,6 +1709,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                             rom_path: rom_path.clone(),
                             last_played_at: None,
                             play_count: 0,
+                            retro_achievements: None,
                         });
                     }
                 }
@@ -1602,6 +1728,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                         rom_path: rom_path.clone(),
                         last_played_at: None,
                         play_count: 0,
+                        retro_achievements: None,
                     })
                     .collect();
 
@@ -1682,7 +1809,7 @@ fn launch_rom_variant(
         )
     })?;
     let child = spawn_launcher(&launcher, &rom_path)?;
-    handoff_focus_to_child(&app, child, game_id.clone());
+    handoff_focus_to_child(&app, child, game_id.clone(), Some(variant_id.clone()));
 
     let now = Utc::now().to_rfc3339();
     {
@@ -1942,6 +2069,10 @@ pub fn run() {
             retroachievements_link_game,
             retroachievements_refresh,
             retroachievements_unlink,
+            retroachievements_link_variant,
+            retroachievements_refresh_variant,
+            retroachievements_unlink_variant,
+            rename_variant,
             swap_game_positions,
             set_game_hidden,
             merge_games,

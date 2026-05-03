@@ -8,9 +8,13 @@ import {
   mergeGames,
   notifyLibraryChanged,
   removeGame,
+  renameVariant,
   retroAchievementsLinkGame,
+  retroAchievementsLinkVariant,
   retroAchievementsRefresh,
+  retroAchievementsRefreshVariant,
   retroAchievementsUnlink,
+  retroAchievementsUnlinkVariant,
   saveLibrary,
   scanEmudeckRoms,
   scanFolder,
@@ -21,6 +25,7 @@ import {
   swapGamePositions,
   upsertGame
 } from './tauri';
+import type { RetroAchievementsLink } from './types';
 
 export const games = writable<Game[]>([]);
 export const selectedId = writable<string | null>(null);
@@ -281,6 +286,79 @@ export async function unlinkRetroAchievements(gameId: string) {
   } finally {
     busyLabel.set(null);
   }
+}
+
+export async function linkVariantRetroAchievements(gameId: string, variantId: string, raGameId: number) {
+  busyLabel.set('Linking variant achievements');
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsLinkVariant(gameId, variantId, raGameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function refreshVariantRetroAchievements(gameId: string, variantId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsRefreshVariant(gameId, variantId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    const refreshed = library.games.find((entry) => entry.id === gameId);
+    if (refreshed) {
+      const current = get(showingAchievementsFor);
+      if (current && current.id === gameId) {
+        showingAchievementsFor.set(refreshed);
+      }
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function unlinkVariantRetroAchievements(gameId: string, variantId: string) {
+  busyLabel.set('Unlinking variant achievements');
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsUnlinkVariant(gameId, variantId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function renameVariantLabel(gameId: string, variantId: string, label: string) {
+  errorMessage.set(null);
+  try {
+    const library = await renameVariant(gameId, variantId, label);
+    games.set(library.games);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  }
+}
+
+export function effectiveAchievements(game: Game): RetroAchievementsLink | null {
+  const overrideVariants = game.variants.filter((variant) => variant.retroAchievements);
+  if (overrideVariants.length) {
+    const sorted = [...overrideVariants].sort((left, right) => {
+      return Date.parse(right.lastPlayedAt ?? '0') - Date.parse(left.lastPlayedAt ?? '0');
+    });
+    return sorted[0].retroAchievements ?? game.retroAchievements ?? null;
+  }
+  return game.retroAchievements ?? null;
 }
 
 export async function scanForRoms() {

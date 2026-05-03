@@ -4,6 +4,7 @@ export type GameVariant = {
   romPath: string;
   lastPlayedAt: string | null;
   playCount: number;
+  retroAchievements: RetroAchievementsLink | null;
 };
 
 export type Achievement = {

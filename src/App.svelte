@@ -48,6 +48,7 @@
     addExecutable,
     busyLabel,
     displays,
+    effectiveAchievements,
     errorMessage,
     filter,
     filteredGames,
@@ -58,12 +59,15 @@
     launchState,
     launchVariant,
     linkRetroAchievements,
+    linkVariantRetroAchievements,
     mergeIntoTarget,
     moveSelection,
     pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
     refreshRetroAchievements,
+    refreshVariantRetroAchievements,
+    renameVariantLabel,
     reorderMode,
     saveGameEdits,
     scanForGames,
@@ -76,7 +80,8 @@
     swapSelectedWith,
     toggleFavorite,
     toggleHiddenForSelected,
-    unlinkRetroAchievements
+    unlinkRetroAchievements,
+    unlinkVariantRetroAchievements
   } from './lib/libraryStore';
   import type { LibraryFilter, SortMode } from './lib/types';
 
@@ -100,6 +105,8 @@
   let pickerIndex = 0;
   let mergePickerOpen = false;
   let mergePickerQuery = '';
+  type RaLinkTarget = { kind: 'game' } | { kind: 'variant'; id: string };
+  let raLinkTarget: RaLinkTarget = { kind: 'game' };
 
   const FILTER_ORDER: LibraryFilter[] = ['all', 'favorites', 'recent', 'hidden'];
   const SORT_ORDER: SortMode[] = ['title', 'recent', 'playCount', 'manual'];
@@ -282,11 +289,19 @@
       : Promise.resolve(() => {});
 
     const unlistenGameFinished = isTauriRuntime
-      ? listen<string>('game-finished', (event) => {
-          const finishedId = event.payload;
-          const game = get(filteredGames).find((entry) => entry.id === finishedId);
-          if (game?.retroAchievements) {
-            refreshRetroAchievements(finishedId).catch(() => {});
+      ? listen<{ gameId: string; variantId: string | null }>('game-finished', (event) => {
+          const { gameId, variantId } = event.payload;
+          const game = get(games).find((entry) => entry.id === gameId);
+          if (!game) return;
+          if (variantId) {
+            const variant = game.variants.find((entry) => entry.id === variantId);
+            if (variant?.retroAchievements) {
+              refreshVariantRetroAchievements(gameId, variantId).catch(() => {});
+              return;
+            }
+          }
+          if (game.retroAchievements) {
+            refreshRetroAchievements(gameId).catch(() => {});
           }
         })
       : Promise.resolve(() => {});
@@ -594,7 +609,7 @@
       return;
     }
     const game = get(selectedGame);
-    if (!game?.retroAchievements) return;
+    if (!game || !effectiveAchievements(game)) return;
     showingAchievementsFor.set(game);
   }
 
@@ -647,17 +662,92 @@
     raBusy = 'Linking RetroAchievements';
     raError = null;
     try {
-      await linkRetroAchievements(editingGame.id, result.id);
+      if (raLinkTarget.kind === 'variant') {
+        await linkVariantRetroAchievements(editingGame.id, raLinkTarget.id, result.id);
+      } else {
+        await linkRetroAchievements(editingGame.id, result.id);
+      }
       const linked = get(selectedGame);
       if (linked && linked.id === editingGame.id) {
         editingGame = { ...linked, tags: [...linked.tags] };
       }
       raSearchResults = [];
+      raLinkTarget = { kind: 'game' };
     } catch (error) {
       raError = String(error);
     } finally {
       raBusy = null;
     }
+  }
+
+  function startVariantRaSearch(variantId: string, defaultQuery: string) {
+    raLinkTarget = { kind: 'variant', id: variantId };
+    raSearchQuery = defaultQuery;
+    raSearchResults = [];
+    raError = null;
+  }
+
+  function cancelVariantRaSearch() {
+    raLinkTarget = { kind: 'game' };
+    raSearchResults = [];
+    raError = null;
+  }
+
+  async function refreshVariantLinkInEditor(variantId: string) {
+    if (!editingGame) return;
+    raBusy = 'Refreshing variant achievements';
+    raError = null;
+    try {
+      await refreshVariantRetroAchievements(editingGame.id, variantId);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function unlinkVariantInEditor(variantId: string) {
+    if (!editingGame) return;
+    raBusy = 'Unlinking variant achievements';
+    raError = null;
+    try {
+      await unlinkVariantRetroAchievements(editingGame.id, variantId);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function commitVariantRename(variantId: string, label: string) {
+    if (!editingGame) return;
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    try {
+      await renameVariantLabel(editingGame.id, variantId, trimmed);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch {}
+  }
+
+  function setVariantLabelLocal(variantId: string, label: string) {
+    if (!editingGame) return;
+    editingGame = {
+      ...editingGame,
+      variants: editingGame.variants.map((variant) =>
+        variant.id === variantId ? { ...variant, label } : variant
+      )
+    };
   }
 
   async function refreshRetroAchievementsLink() {
@@ -984,10 +1074,11 @@
         {/if}
       </div>
 
-      {#if $selectedGame.retroAchievements}
+      {@const heroAchievements = effectiveAchievements($selectedGame)}
+      {#if heroAchievements}
         <div class="achievement-slot" title="Achievements">
           <Trophy size={18} />
-          <span>{$selectedGame.retroAchievements.achievementsEarned} / {$selectedGame.retroAchievements.achievementsTotal}</span>
+          <span>{heroAchievements.achievementsEarned} / {heroAchievements.achievementsTotal}</span>
         </div>
       {/if}
     {:else}
@@ -1051,7 +1142,7 @@
           <button title="Edit selected game" on:click={openEditor} disabled={!$selectedGame}>
             <Pencil size={18} />
           </button>
-          {#if $selectedGame?.retroAchievements}
+          {#if $selectedGame && effectiveAchievements($selectedGame)}
             <button title="Achievements (Y)" on:click={toggleAchievementsModal}>
               <Trophy size={18} />
             </button>
@@ -1135,8 +1226,8 @@
       {/if}
     </div>
 
-    {#if $showingAchievementsFor && $showingAchievementsFor.retroAchievements}
-      {@const link = $showingAchievementsFor.retroAchievements}
+    {#if $showingAchievementsFor && effectiveAchievements($showingAchievementsFor)}
+      {@const link = effectiveAchievements($showingAchievementsFor)!}
       <div class="achievements-panel" role="dialog" aria-label="Achievements">
         <div class="achievements-header">
           <div>
@@ -1233,20 +1324,93 @@
             <div class="wide variant-section">
               <span>ROM Variants</span>
               <div class="variant-rows">
-                {#each editingGame.variants as variant}
+                {#each editingGame.variants as variant (variant.id)}
                   <div class="variant-edit-row">
                     <div class="variant-edit-info">
-                      <strong>{variant.label}</strong>
+                      <input
+                        class="variant-label-input"
+                        value={variant.label}
+                        placeholder="Variant label"
+                        on:input={(event) => setVariantLabelLocal(variant.id, (event.currentTarget as HTMLInputElement).value)}
+                        on:change={(event) => commitVariantRename(variant.id, (event.currentTarget as HTMLInputElement).value)}
+                      />
                       <small class="path" title={variant.romPath}>{variant.romPath}</small>
                       <small>{variant.playCount} plays{variant.lastPlayedAt ? ` · last ${new Date(variant.lastPlayedAt).toLocaleDateString()}` : ''}</small>
+                      {#if variant.retroAchievements}
+                        {@const variantRa = variant.retroAchievements}
+                        <small class="variant-ra">
+                          <Trophy size={12} />
+                          {variantRa.title} · {variantRa.achievementsEarned} / {variantRa.achievementsTotal}
+                        </small>
+                      {/if}
                     </div>
-                    {#if editingGame.variants.length > 1}
-                      <button type="button" title="Split into separate game" on:click={() => splitVariantFromEditor(variant.id)}>
-                        <Split size={14} />
-                        Split
-                      </button>
-                    {/if}
+                    <div class="variant-edit-actions">
+                      {#if variant.retroAchievements}
+                        <button type="button" title="Refresh achievements" on:click={() => refreshVariantLinkInEditor(variant.id)}>
+                          <RefreshCw size={12} />
+                        </button>
+                        <button type="button" title="Unlink achievements" on:click={() => unlinkVariantInEditor(variant.id)}>
+                          <Unlink size={12} />
+                        </button>
+                      {:else if isRaSupported(editingGame.platform)}
+                        <button
+                          type="button"
+                          title="Link RetroAchievements override"
+                          on:click={() => startVariantRaSearch(variant.id, variant.label)}
+                        >
+                          <Trophy size={12} />
+                          Link RA
+                        </button>
+                      {/if}
+                      {#if editingGame.variants.length > 1}
+                        <button type="button" title="Split into separate game" on:click={() => splitVariantFromEditor(variant.id)}>
+                          <Split size={12} />
+                          Split
+                        </button>
+                      {/if}
+                    </div>
                   </div>
+                  {#if raLinkTarget.kind === 'variant' && raLinkTarget.id === variant.id}
+                    <div class="variant-ra-search">
+                      <div class="path-row">
+                        <input
+                          type="text"
+                          bind:value={raSearchQuery}
+                          placeholder="Search RA games for this variant"
+                        />
+                        <button type="button" on:click={searchRetroAchievementsGames}>
+                          <Trophy size={14} />
+                          Search
+                        </button>
+                        <button type="button" on:click={cancelVariantRaSearch}>Cancel</button>
+                      </div>
+                      {#if raBusy}
+                        <div class="artwork-message">{raBusy}</div>
+                      {/if}
+                      {#if raError}
+                        <div class="artwork-message error">{raError}</div>
+                      {/if}
+                      {#if raSearchResults.length}
+                        <div class="ra-results">
+                          {#each raSearchResults as result}
+                            <button
+                              type="button"
+                              class="ra-result-row"
+                              on:click={() => applyRetroAchievementsLink(result)}
+                            >
+                              {#if result.iconUrl}
+                                <img src={result.iconUrl} alt="" />
+                              {/if}
+                              <div class="ra-result-meta">
+                                <strong>{result.title}</strong>
+                                <small>{result.numAchievements} achievements · {result.points} pts</small>
+                              </div>
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
                 {/each}
               </div>
             </div>
@@ -1551,12 +1715,12 @@
                     </button>
                   </div>
                 </div>
-              {:else}
+              {:else if raLinkTarget.kind === 'game'}
                 <div class="path-row">
                   <input
                     type="text"
                     bind:value={raSearchQuery}
-                    placeholder="Search RA games"
+                    placeholder="Search RA games (game-level link)"
                   />
                   <button type="button" on:click={searchRetroAchievementsGames}>
                     <Trophy size={14} />

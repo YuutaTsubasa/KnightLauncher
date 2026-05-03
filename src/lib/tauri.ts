@@ -186,6 +186,26 @@ export async function retroAchievementsUnlink(gameId: string): Promise<GameLibra
   return invoke<GameLibrary>('retroachievements_unlink', { gameId });
 }
 
+export async function retroAchievementsLinkVariant(gameId: string, variantId: string, raGameId: number): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_link_variant', { gameId, variantId, raGameId });
+}
+
+export async function retroAchievementsRefreshVariant(gameId: string, variantId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_refresh_variant', { gameId, variantId });
+}
+
+export async function retroAchievementsUnlinkVariant(gameId: string, variantId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_unlink_variant', { gameId, variantId });
+}
+
+export async function renameVariant(gameId: string, variantId: string, label: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('rename_variant', { gameId, variantId, label });
+}
+
 export async function swapGamePositions(gameIdA: string, gameIdB: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('swap_game_positions', { gameIdA, gameIdB });
