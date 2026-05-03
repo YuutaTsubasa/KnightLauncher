@@ -489,34 +489,39 @@ struct EmuSystem {
     folder: &'static str,
     platform_id: &'static str,
     extensions: &'static [&'static str],
+    launchers: &'static [&'static str],
 }
 
 const EMU_SYSTEMS: &[EmuSystem] = &[
-    EmuSystem { folder: "snes", platform_id: "sfc", extensions: &["smc", "sfc", "fig"] },
-    EmuSystem { folder: "nes", platform_id: "fc", extensions: &["nes"] },
-    EmuSystem { folder: "n64", platform_id: "n64", extensions: &["n64", "z64", "v64"] },
-    EmuSystem { folder: "gb", platform_id: "gb", extensions: &["gb"] },
-    EmuSystem { folder: "gbc", platform_id: "gbc", extensions: &["gbc", "gb"] },
-    EmuSystem { folder: "gba", platform_id: "gba", extensions: &["gba"] },
-    EmuSystem { folder: "nds", platform_id: "ds", extensions: &["nds"] },
-    EmuSystem { folder: "n3ds", platform_id: "3ds", extensions: &["3ds", "cci", "cia", "app", "cxi"] },
-    EmuSystem { folder: "gc", platform_id: "gc", extensions: &["iso", "gcm", "ciso", "rvz", "wbfs"] },
-    EmuSystem { folder: "wii", platform_id: "wii", extensions: &["iso", "wbfs", "rvz", "wad"] },
-    EmuSystem { folder: "wiiu", platform_id: "wiiu", extensions: &["wud", "wux", "wua", "rpx"] },
-    EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"] },
-    EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"] },
-    EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"] },
-    EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"] },
-    EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"] },
-    EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"] },
-    EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"] },
-    EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"] },
-    EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"] },
-    EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"] },
-    EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"] },
-    EmuSystem { folder: "ngp", platform_id: "ngpc", extensions: &["ngp"] },
-    EmuSystem { folder: "ngpc", platform_id: "ngpc", extensions: &["ngc"] },
-    EmuSystem { folder: "android", platform_id: "android", extensions: &["apk"] },
+    EmuSystem { folder: "snes", platform_id: "sfc", extensions: &["smc", "sfc", "fig"], launchers: &["retroarch"] },
+    EmuSystem { folder: "nes", platform_id: "fc", extensions: &["nes"], launchers: &["retroarch"] },
+    EmuSystem { folder: "n64", platform_id: "n64", extensions: &["n64", "z64", "v64"], launchers: &["retroarch"] },
+    EmuSystem { folder: "gb", platform_id: "gb", extensions: &["gb"], launchers: &["retroarch"] },
+    EmuSystem { folder: "gbc", platform_id: "gbc", extensions: &["gbc", "gb"], launchers: &["retroarch"] },
+    EmuSystem { folder: "gba", platform_id: "gba", extensions: &["gba"], launchers: &["retroarch"] },
+    EmuSystem { folder: "nds", platform_id: "ds", extensions: &["nds"], launchers: &["melonDS", "retroarch"] },
+    EmuSystem { folder: "n3ds", platform_id: "3ds", extensions: &["3ds", "cci", "cia", "app", "cxi"], launchers: &["azahar"] },
+    EmuSystem { folder: "gc", platform_id: "gc", extensions: &["iso", "gcm", "ciso", "rvz", "wbfs"], launchers: &["dolphin"] },
+    EmuSystem { folder: "wii", platform_id: "wii", extensions: &["iso", "wbfs", "rvz", "wad"], launchers: &["dolphin", "primehack"] },
+    EmuSystem { folder: "wiiu", platform_id: "wiiu", extensions: &["wud", "wux", "wua", "rpx"], launchers: &["Cemu"] },
+    EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"], launchers: &["Ryujinx"] },
+    EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
+    EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
+    EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"] },
+    EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"] },
+    EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"] },
+    EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"], launchers: &["retroarch"] },
+    EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"], launchers: &["duckstation", "retroarch"] },
+    EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"], launchers: &["pcsx2"] },
+    EmuSystem { folder: "ps3", platform_id: "ps3", extensions: &["iso", "pkg", "rap"], launchers: &["rpcs3"] },
+    EmuSystem { folder: "ps4", platform_id: "ps4", extensions: &["pkg", "iso"], launchers: &["shadps4"] },
+    EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"], launchers: &["PPSSPP"] },
+    EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"], launchers: &["Vita3K"] },
+    EmuSystem { folder: "ngp", platform_id: "ngpc", extensions: &["ngp"], launchers: &["retroarch"] },
+    EmuSystem { folder: "ngpc", platform_id: "ngpc", extensions: &["ngc"], launchers: &["retroarch"] },
+    EmuSystem { folder: "xbox", platform_id: "xbox", extensions: &["iso", "xbe"], launchers: &["xemu"] },
+    EmuSystem { folder: "xbox360", platform_id: "xbox360", extensions: &["iso", "xex"], launchers: &["xenia"] },
+    EmuSystem { folder: "scummvm", platform_id: "scummvm", extensions: &["scummvm"], launchers: &["ScummVM"] },
 ];
 
 fn find_emudeck_subdir(root: &Path, segments: &[&str]) -> Option<PathBuf> {
@@ -533,15 +538,21 @@ fn find_emudeck_subdir(root: &Path, segments: &[&str]) -> Option<PathBuf> {
     None
 }
 
-fn locate_launcher(emudeck_root: &Path, system_folder: &str) -> Option<PathBuf> {
+fn locate_launcher(emudeck_root: &Path, candidates: &[&str]) -> Option<PathBuf> {
     let dir = find_emudeck_subdir(emudeck_root, &["tools", "launchers"])?;
-    for ext in &["bat", "cmd", "ps1"] {
-        let candidate = dir.join(format!("{system_folder}.{ext}"));
-        if candidate.exists() {
-            return Some(candidate);
+    for name in candidates {
+        for ext in &["ps1", "bat", "cmd"] {
+            let candidate = dir.join(format!("{name}.{ext}"));
+            if candidate.exists() {
+                return Some(candidate);
+            }
         }
     }
     None
+}
+
+fn lookup_emu_system(folder: &str) -> Option<&'static EmuSystem> {
+    EMU_SYSTEMS.iter().find(|system| system.folder == folder)
 }
 
 fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<(), String> {
@@ -573,7 +584,7 @@ fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn classify_region_tag(tag: &str) -> Option<&'static str> {
+fn classify_single_region(tag: &str) -> Option<&'static str> {
     match tag.to_lowercase().as_str() {
         "japan" | "j" | "jp" | "jpn" => Some("Japan"),
         "usa" | "u" | "us" => Some("USA"),
@@ -582,12 +593,29 @@ fn classify_region_tag(tag: &str) -> Option<&'static str> {
         "asia" => Some("Asia"),
         "korea" | "kr" => Some("Korea"),
         "china" | "cn" => Some("China"),
-        "germany" | "de" => Some("Germany"),
-        "france" | "fr" => Some("France"),
-        "italy" | "it" => Some("Italy"),
-        "spain" | "es" => Some("Spain"),
+        "taiwan" | "tw" => Some("Taiwan"),
+        "germany" | "de" | "ger" => Some("Germany"),
+        "france" | "fr" | "fre" => Some("France"),
+        "italy" | "it" | "ita" => Some("Italy"),
+        "spain" | "es" | "spa" => Some("Spain"),
+        "brazil" | "br" | "bra" => Some("Brazil"),
+        "australia" | "au" | "aus" => Some("Australia"),
+        "netherlands" | "nl" => Some("Netherlands"),
+        "sweden" | "se" => Some("Sweden"),
         _ => None,
     }
+}
+
+fn classify_region_tag(tag: &str) -> Option<&'static str> {
+    if let Some(region) = classify_single_region(tag) {
+        return Some(region);
+    }
+    for part in tag.split(',') {
+        if let Some(region) = classify_single_region(part.trim()) {
+            return Some(region);
+        }
+    }
+    None
 }
 
 fn parse_rom_filename(stem: &str) -> (String, Option<String>) {
@@ -595,7 +623,7 @@ fn parse_rom_filename(stem: &str) -> (String, Option<String>) {
     let mut current_paren = String::new();
     let mut paren_depth: i32 = 0;
     let mut bracket_depth: i32 = 0;
-    let mut region: Option<String> = None;
+    let mut paren_groups: Vec<String> = Vec::new();
 
     for ch in stem.chars() {
         match ch {
@@ -609,8 +637,9 @@ fn parse_rom_filename(stem: &str) -> (String, Option<String>) {
             ')' => {
                 paren_depth -= 1;
                 if paren_depth == 0 {
-                    if region.is_none() {
-                        region = classify_region_tag(current_paren.trim()).map(|s| s.to_string());
+                    let trimmed = current_paren.trim().to_string();
+                    if !trimmed.is_empty() {
+                        paren_groups.push(trimmed);
                     }
                     continue;
                 }
@@ -634,7 +663,13 @@ fn parse_rom_filename(stem: &str) -> (String, Option<String>) {
     }
 
     let clean: String = clean.split_whitespace().collect::<Vec<_>>().join(" ");
-    (clean, region)
+
+    let label = paren_groups
+        .iter()
+        .find_map(|group| classify_region_tag(group).map(|region| region.to_string()))
+        .or_else(|| paren_groups.first().cloned());
+
+    (clean, label)
 }
 
 fn sorted_monitor_layouts(app: &AppHandle) -> Result<Vec<MonitorLayout>, String> {
@@ -924,8 +959,8 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                 .and_then(|value| value.to_str())
                 .unwrap_or("")
                 .to_string();
-            let (clean_title, region) = parse_rom_filename(&stem);
-            let label = region.unwrap_or_else(|| "Default".to_string());
+            let (clean_title, parsed_label) = parse_rom_filename(&stem);
+            let label = parsed_label.unwrap_or_else(|| "Default".to_string());
             let title_for_group = if clean_title.is_empty() {
                 stem.clone()
             } else {
@@ -1047,9 +1082,12 @@ fn launch_rom_variant(
         ));
     }
 
-    let launcher = locate_launcher(&emudeck_path, &system).ok_or_else(|| {
+    let definition = lookup_emu_system(&system)
+        .ok_or_else(|| format!("Unknown ROM system '{system}'."))?;
+    let launcher = locate_launcher(&emudeck_path, definition.launchers).ok_or_else(|| {
         format!(
-            "EmuDeck launcher script for system '{system}' not found under {}",
+            "Launcher not found for system '{system}'. Tried: {} under {}",
+            definition.launchers.join(", "),
             emudeck_path.display()
         )
     })?;
