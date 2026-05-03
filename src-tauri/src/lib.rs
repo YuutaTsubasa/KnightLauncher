@@ -1907,87 +1907,6 @@ fn steamgriddb_download_artwork(
     Ok(path.to_string_lossy().to_string())
 }
 
-fn parse_google_image_html(html: &str) -> Vec<GoogleImageResult> {
-    let pattern = match regex::Regex::new(r#"\["(https?://[^"\\\s]+)",\s*(\d+),\s*(\d+)\]"#) {
-        Ok(pattern) => pattern,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut results: Vec<GoogleImageResult> = Vec::new();
-
-    for cap in pattern.captures_iter(html) {
-        let url = cap[1].to_string();
-        let width: u32 = cap[2].parse().unwrap_or(0);
-        let height: u32 = cap[3].parse().unwrap_or(0);
-
-        if width < 120 || height < 120 {
-            continue;
-        }
-        if url.contains("gstatic.com") || url.contains("google.com/logos") {
-            continue;
-        }
-        let lower = url.to_lowercase();
-        if lower.ends_with(".svg") || lower.ends_with(".gif") {
-            continue;
-        }
-        if !seen.insert(url.clone()) {
-            continue;
-        }
-
-        results.push(GoogleImageResult {
-            title: String::new(),
-            link: url.clone(),
-            thumbnail: url,
-            context_link: None,
-            width: Some(width),
-            height: Some(height),
-            mime: None,
-        });
-
-        if results.len() >= 32 {
-            break;
-        }
-    }
-
-    results
-}
-
-#[tauri::command]
-fn google_image_search(_app: AppHandle, query: String) -> Result<Vec<GoogleImageResult>, String> {
-    let query = query.trim();
-    if query.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let encoded = urlencoding::encode(query);
-    let url = format!(
-        "https://www.google.com/search?q={encoded}&tbm=isch&safe=active&hl=en&pws=0"
-    );
-
-    let response = http_client()?
-        .get(&url)
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
-        .header("Accept-Language", "en-US,en;q=0.9")
-        .header("Cookie", "CONSENT=YES+cb")
-        .send()
-        .map_err(|error| format!("Unable to reach Google Images: {error}"))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("Google Images returned HTTP {status}."));
-    }
-
-    let html = response
-        .text()
-        .map_err(|error| format!("Unable to read Google Images response: {error}"))?;
-
-    Ok(parse_google_image_html(&html))
-}
-
 #[tauri::command]
 fn google_download_artwork(
     app: AppHandle,
@@ -2032,6 +1951,63 @@ fn google_download_artwork(
         .map_err(|error| format!("Unable to write {}: {error}", path.display()))?;
 
     Ok(path.to_string_lossy().to_string())
+}
+
+const GOOGLE_PICKER_LABEL: &str = "google-image-picker";
+
+fn host_is_google_owned(host: &str) -> bool {
+    let host = host.to_lowercase();
+    host.contains("google.com")
+        || host.contains("gstatic.com")
+        || host.contains("googleusercontent.com")
+        || host.contains("googleapis.com")
+        || host.contains("youtube.com")
+        || host.contains("youtu.be")
+        || host.contains("ytimg.com")
+        || host == "consent.google.com"
+}
+
+#[tauri::command]
+fn open_google_image_picker(app: AppHandle, query: String) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(GOOGLE_PICKER_LABEL) {
+        let _ = existing.close();
+    }
+
+    let trimmed = query.trim();
+    let encoded = urlencoding::encode(trimmed);
+    let url_str = format!(
+        "https://www.google.com/search?q={encoded}&udm=2&safe=active&hl=en"
+    );
+    let url = reqwest::Url::parse(&url_str).map_err(|error| format!("Invalid URL: {error}"))?;
+
+    let app_handle = app.clone();
+
+    WebviewWindowBuilder::new(&app, GOOGLE_PICKER_LABEL, WebviewUrl::External(url))
+        .title(format!("Pick image — {trimmed}"))
+        .inner_size(1200.0, 820.0)
+        .min_inner_size(640.0, 480.0)
+        .resizable(true)
+        .decorations(true)
+        .on_navigation(move |target| {
+            let host = target.host_str().unwrap_or("");
+            if host.is_empty() || host_is_google_owned(host) {
+                return true;
+            }
+            let url_string = target.as_str().to_string();
+            let _ = app_handle.emit("google-image-picked", &url_string);
+
+            let inner = app_handle.clone();
+            std::thread::spawn(move || {
+                if let Some(window) = inner.get_webview_window(GOOGLE_PICKER_LABEL) {
+                    let _ = window.close();
+                }
+            });
+            false
+        })
+        .build()
+        .map_err(|error| format!("Unable to open Google picker: {error}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -2102,8 +2078,8 @@ pub fn run() {
             steamgriddb_search_games,
             steamgriddb_game_artwork,
             steamgriddb_download_artwork,
-            google_image_search,
             google_download_artwork,
+            open_google_image_picker,
             arrange_displays,
             swap_displays
         ])

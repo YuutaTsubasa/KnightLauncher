@@ -29,19 +29,19 @@
   import {
     arrangeDisplays,
     loadSettings,
+    openGoogleImagePicker,
     retroAchievementsSearchGames,
     saveSettings,
     selectExecutablePath,
     selectFolder,
     selectImagePath,
     googleDownloadArtwork,
-    googleImageSearch,
     steamGridDbDownloadArtwork,
     steamGridDbGameArtwork,
     steamGridDbSearchGames,
     swapDisplays
   } from './lib/tauri';
-  import type { Game, GoogleImageResult, RaGameSearchResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
+  import type { Game, RaGameSearchResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
   import PlatformBadge from './lib/PlatformBadge.svelte';
   import { PLATFORMS, frameGradient, isRaSupported, resolvePlatform } from './lib/platforms';
   import {
@@ -220,7 +220,6 @@
   let artworkGames: SteamGridDbGame[] = [];
   let selectedArtworkGame: SteamGridDbGame | null = null;
   let artworkResults: SteamGridDbArtwork | null = null;
-  let googleResults: GoogleImageResult[] = [];
   let artworkBusy: string | null = null;
   let artworkError: string | null = null;
   const isTauriRuntime = '__TAURI_INTERNALS__' in window;
@@ -281,6 +280,24 @@
     const unlistenLibrarySync = isTauriRuntime
       ? listen<void>('library-changed', () => {
           refreshLibraryPreservingSelection();
+        })
+      : Promise.resolve(() => {});
+
+    const unlistenGooglePicked = isTauriRuntime
+      ? listen<string>('google-image-picked', async (event) => {
+          if (!editingGame) return;
+          const url = event.payload;
+          artworkBusy = 'Downloading picked image';
+          artworkError = null;
+          try {
+            const path = await googleDownloadArtwork(url, googleArtworkKind, editingGame.id);
+            const field = googleArtworkKind === 'hero' ? 'heroImage' : googleArtworkKind === 'logo' ? 'logoImage' : 'coverImage';
+            editingGame = { ...editingGame, [field]: path };
+          } catch (error) {
+            artworkError = String(error);
+          } finally {
+            artworkBusy = null;
+          }
         })
       : Promise.resolve(() => {});
 
@@ -439,6 +456,7 @@
       selectedListener.then((unsubscribe) => unsubscribe());
       unlistenDisplaySync.then((unsubscribe) => unsubscribe());
       unlistenLibrarySync.then((unsubscribe) => unsubscribe());
+      unlistenGooglePicked.then((unsubscribe) => unsubscribe());
       unlistenGameFinished.then((unsubscribe) => unsubscribe());
       gamepadLoop.stop();
       window.removeEventListener('keydown', onKeyDown);
@@ -831,7 +849,6 @@
     artworkGames = [];
     selectedArtworkGame = null;
     artworkResults = null;
-    googleResults = [];
     artworkError = null;
     artworkBusy = null;
   }
@@ -906,7 +923,6 @@
     artworkBusy = 'Searching SteamGridDB';
     artworkError = null;
     artworkResults = null;
-    googleResults = [];
     selectedArtworkGame = null;
 
     try {
@@ -952,22 +968,14 @@
   }
 
 
-  async function searchGoogleArtwork() {
+  async function openGoogleSearchWindow() {
     const query = artworkQuery.trim() || editingGame?.title.trim() || '';
     if (!query) return;
-
-    artworkBusy = 'Searching Google Images';
     artworkError = null;
-    artworkResults = null;
-    artworkGames = [];
-    selectedArtworkGame = null;
-
     try {
-      googleResults = await googleImageSearch(query);
+      await openGoogleImagePicker(query);
     } catch (error) {
       artworkError = String(error);
-    } finally {
-      artworkBusy = null;
     }
   }
 
@@ -978,22 +986,6 @@
     try {
       const path = await googleDownloadArtwork(url, kind, editingGame.id);
       const field = kind === 'hero' ? 'heroImage' : kind === 'logo' ? 'logoImage' : 'coverImage';
-      editingGame = { ...editingGame, [field]: path };
-    } catch (error) {
-      artworkError = String(error);
-    } finally {
-      artworkBusy = null;
-    }
-  }
-
-  async function applyGoogleArtwork(result: GoogleImageResult) {
-    if (!editingGame) return;
-
-    artworkBusy = 'Downloading Google image';
-    artworkError = null;
-    try {
-      const path = await googleDownloadArtwork(result.link, googleArtworkKind, editingGame.id);
-      const field = googleArtworkKind === 'hero' ? 'heroImage' : googleArtworkKind === 'logo' ? 'logoImage' : 'coverImage';
       editingGame = { ...editingGame, [field]: path };
     } catch (error) {
       artworkError = String(error);
@@ -1039,10 +1031,12 @@
         <span>KnightLauncher</span>
       </div>
 
-      <div class="display-pill" title="Display mode">
-        <Monitor size={16} />
-        {windowRole === 'single' ? ($hasDualDisplay ? 'Dual display' : 'Single display') : windowRole}
-      </div>
+      {#if windowRole === 'single'}
+        <div class="display-pill" title="Display mode">
+          <Monitor size={16} />
+          {$hasDualDisplay ? 'Dual display' : 'Single display'}
+        </div>
+      {/if}
 
       {#if controllerName}
         <div class="display-pill" title={controllerName}>
@@ -1555,17 +1549,20 @@
               </div>
             {:else if artworkSource === 'google'}
               <div class="path-row">
-                <input bind:value={artworkQuery} placeholder="Search Google Images" />
+                <input bind:value={artworkQuery} placeholder="Search query" />
                 <select bind:value={googleArtworkKind} title="Target image field">
                   <option value="cover">Cover</option>
                   <option value="hero">Hero</option>
                   <option value="logo">Logo</option>
                 </select>
-                <button type="button" on:click={searchGoogleArtwork}>
+                <button type="button" on:click={openGoogleSearchWindow}>
                   <Image size={16} />
-                  Search
+                  Open Google
                 </button>
               </div>
+              <small class="merge-hint">
+                A new window opens. Browse Google Images, then right-click an image and pick "Open image in new tab" — the launcher will capture it as {googleArtworkKind} and close the window.
+              </small>
             {/if}
 
             {#if artworkBusy}
@@ -1619,20 +1616,6 @@
                   {#each artworkList(artworkResults, 'logos') as asset}
                     <button type="button" title="Use as logo" on:click={() => applyArtwork(asset)}>
                       <img src={asset.thumb} alt="" />
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/if}
-
-            {#if artworkSource === 'google' && googleResults.length}
-              <div class="artwork-section">
-                <span>Google Images</span>
-                <div class="artwork-grid google">
-                  {#each googleResults as result}
-                    <button type="button" title={result.title} on:click={() => applyGoogleArtwork(result)}>
-                      <img src={result.thumbnail} alt="" />
-                      <small>{result.width ?? '?'} x {result.height ?? '?'}</small>
                     </button>
                   {/each}
                 </div>

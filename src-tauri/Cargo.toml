@@ -22,4 +22,3 @@ tauri = { version = "2", features = ["protocol-asset"] }
 urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
-regex = "1"

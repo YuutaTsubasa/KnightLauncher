@@ -5,7 +5,6 @@ import type {
   DisplayInfo,
   Game,
   GameLibrary,
-  GoogleImageResult,
   RaGameSearchResult,
   SteamGridDbArtwork,
   SteamGridDbGame
@@ -142,26 +141,14 @@ export async function steamGridDbDownloadArtwork(url: string, kind: string, game
   return invoke<string>('steamgriddb_download_artwork', { url, kind, gameId });
 }
 
-export async function googleImageSearch(query: string): Promise<GoogleImageResult[]> {
-  if (!isTauri) {
-    return [
-      {
-        title: `${query || 'Game'} artwork`,
-        link: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f',
-        thumbnail: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=320',
-        contextLink: 'https://unsplash.com',
-        width: 1600,
-        height: 1067,
-        mime: 'image/jpeg'
-      }
-    ];
-  }
-  return invoke<GoogleImageResult[]>('google_image_search', { query });
-}
-
 export async function googleDownloadArtwork(url: string, kind: string, gameId: string): Promise<string> {
   if (!isTauri) return url;
   return invoke<string>('google_download_artwork', { url, kind, gameId });
+}
+
+export async function openGoogleImagePicker(query: string): Promise<void> {
+  if (!isTauri) return;
+  return invoke<void>('open_google_image_picker', { query });
 }
 
 export async function retroAchievementsSearchGames(query: string, platformId: string): Promise<RaGameSearchResult[]> {
