@@ -90,6 +90,14 @@ main.detail-only .hero-logo {
   border-bottom: 1px solid rgba(21, 32, 38, 0.08);
 }
 
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  z-index: 0;
+}
+
 .top-display::after {
   position: absolute;
   inset: 0;
@@ -407,8 +415,8 @@ h1 {
 .platform-frame {
   position: relative;
   isolation: isolate;
-  padding: 5px;
-  border-radius: 14px;
+  padding: 8px;
+  border-radius: 18px;
 }
 
 .cover {
@@ -424,7 +432,7 @@ h1 {
     radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.78), transparent 42%),
     linear-gradient(150deg, rgba(128, 221, 224, 0.36), rgba(255, 200, 87, 0.18)),
     #dfeaec;
-  border-radius: 9px;
+  border-radius: 10px;
 }
 
 .badge-corner {
@@ -432,11 +440,11 @@ h1 {
   top: 0;
   left: 0;
   z-index: 2;
-  width: 26%;
-  max-width: 40px;
+  width: 36%;
+  max-width: 64px;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 14px 0 8px 0;
+  border-radius: 18px 0 14px 0;
   pointer-events: none;
 }
 

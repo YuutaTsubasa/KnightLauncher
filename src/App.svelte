@@ -26,6 +26,7 @@
   import { convertFileSrc } from '@tauri-apps/api/core';
   import { emit, listen } from '@tauri-apps/api/event';
   import { get } from 'svelte/store';
+  import { fade, fly } from 'svelte/transition';
   import {
     arrangeDisplays,
     loadSettings,
@@ -673,9 +674,10 @@
     }
   }
 
-  function startVariantRaSearch(variantId: string, defaultQuery: string) {
+  function startVariantRaSearch(variantId: string) {
+    if (!editingGame) return;
     raLinkTarget = { kind: 'variant', id: variantId };
-    raSearchQuery = defaultQuery;
+    raSearchQuery = editingGame.title.trim();
     raSearchResults = [];
     raError = null;
   }
@@ -980,7 +982,7 @@
       .join('');
   }
 
-  function heroStyle(game: Game | null) {
+  function heroBackgroundStyle(game: Game | null) {
     const url = imageUrl(game?.heroImage ?? null);
     if (!url) return '';
     return `background-image: url("${url}")`;
@@ -992,7 +994,16 @@
 </script>
 
 <main class:dual={$hasDualDisplay} class:detail-only={windowRole === 'detail'} class:library-only={windowRole === 'library'}>
-  <section class="top-display" class:has-hero={!!$selectedGame?.heroImage} style={heroStyle($selectedGame)}>
+  <section class="top-display" class:has-hero={!!$selectedGame?.heroImage}>
+    {#if $selectedGame?.heroImage}
+      {#key $selectedGame.id}
+        <div
+          class="hero-bg"
+          style={heroBackgroundStyle($selectedGame)}
+          transition:fade={{ duration: 360 }}
+        ></div>
+      {/key}
+    {/if}
     <div class="status-bar">
       <div class="brand">
         <Gamepad2 size={22} />
@@ -1016,11 +1027,22 @@
 
     {#if $selectedGame}
       <div class="hero-copy">
-        {#if $selectedGame.logoImage}
-          <img class="hero-logo" src={imageUrl($selectedGame.logoImage)} alt={$selectedGame.title} />
-        {:else}
-          <h1>{$selectedGame.title}</h1>
-        {/if}
+        {#key $selectedGame.id}
+          {#if $selectedGame.logoImage}
+            <img
+              class="hero-logo"
+              src={imageUrl($selectedGame.logoImage)}
+              alt={$selectedGame.title}
+              in:fly={{ y: 28, duration: 380, delay: 80 }}
+              out:fade={{ duration: 200 }}
+            />
+          {:else}
+            <h1
+              in:fly={{ y: 28, duration: 380, delay: 80 }}
+              out:fade={{ duration: 200 }}
+            >{$selectedGame.title}</h1>
+          {/if}
+        {/key}
       </div>
 
       {@const heroAchievements = effectiveAchievements($selectedGame)}
@@ -1305,7 +1327,7 @@
                         <button
                           type="button"
                           title="Link RetroAchievements override"
-                          on:click={() => startVariantRaSearch(variant.id, variant.label)}
+                          on:click={() => startVariantRaSearch(variant.id)}
                         >
                           <Trophy size={12} />
                           Link RA
