@@ -1030,20 +1030,21 @@
     {#if $selectedGame}
       <div class="hero-copy">
         {#key $selectedGame.id}
-          {#if $selectedGame.logoImage}
-            <img
-              class="hero-logo"
-              src={imageUrl($selectedGame.logoImage)}
-              alt={$selectedGame.title}
-              in:fly={{ y: 56, duration: 520, delay: 120, easing: cubicOut }}
-              out:fade={{ duration: 220 }}
-            />
-          {:else}
-            <h1
-              in:fly={{ y: 56, duration: 520, delay: 120, easing: cubicOut }}
-              out:fade={{ duration: 220 }}
-            >{$selectedGame.title}</h1>
-          {/if}
+          <div
+            class="hero-anim"
+            in:fly={{ y: 80, duration: 560, delay: 140, easing: cubicOut }}
+            out:fade={{ duration: 220 }}
+          >
+            {#if $selectedGame.logoImage}
+              <img
+                class="hero-logo"
+                src={imageUrl($selectedGame.logoImage)}
+                alt={$selectedGame.title}
+              />
+            {:else}
+              <h1>{$selectedGame.title}</h1>
+            {/if}
+          </div>
         {/key}
       </div>
 
