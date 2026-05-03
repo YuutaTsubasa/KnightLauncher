@@ -146,11 +146,6 @@ export async function googleDownloadArtwork(url: string, kind: string, gameId: s
   return invoke<string>('google_download_artwork', { url, kind, gameId });
 }
 
-export async function openGoogleImagePicker(query: string): Promise<void> {
-  if (!isTauri) return;
-  return invoke<void>('open_google_image_picker', { query });
-}
-
 export async function retroAchievementsSearchGames(query: string, platformId: string): Promise<RaGameSearchResult[]> {
   if (!isTauri) return [];
   return invoke<RaGameSearchResult[]>('retroachievements_search_games', { query, platformId });

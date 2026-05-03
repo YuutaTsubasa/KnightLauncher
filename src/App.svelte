@@ -29,7 +29,6 @@
   import {
     arrangeDisplays,
     loadSettings,
-    openGoogleImagePicker,
     retroAchievementsSearchGames,
     saveSettings,
     selectExecutablePath,
@@ -207,7 +206,7 @@
   $: if ($pickingVariantsFor) {
     pickerIndex = 0;
   }
-  let artworkSource: 'steamgriddb' | 'google' | 'retroachievements' = 'steamgriddb';
+  let artworkSource: 'steamgriddb' | 'retroachievements' = 'steamgriddb';
   let steamGridDbApiKey = '';
   let retroAchievementsUser = '';
   let retroAchievementsApiKey = '';
@@ -216,7 +215,6 @@
   let raBusy: string | null = null;
   let raError: string | null = null;
   let artworkQuery = '';
-  let googleArtworkKind: 'cover' | 'hero' | 'logo' = 'hero';
   let artworkGames: SteamGridDbGame[] = [];
   let selectedArtworkGame: SteamGridDbGame | null = null;
   let artworkResults: SteamGridDbArtwork | null = null;
@@ -280,24 +278,6 @@
     const unlistenLibrarySync = isTauriRuntime
       ? listen<void>('library-changed', () => {
           refreshLibraryPreservingSelection();
-        })
-      : Promise.resolve(() => {});
-
-    const unlistenGooglePicked = isTauriRuntime
-      ? listen<string>('google-image-picked', async (event) => {
-          if (!editingGame) return;
-          const url = event.payload;
-          artworkBusy = 'Downloading picked image';
-          artworkError = null;
-          try {
-            const path = await googleDownloadArtwork(url, googleArtworkKind, editingGame.id);
-            const field = googleArtworkKind === 'hero' ? 'heroImage' : googleArtworkKind === 'logo' ? 'logoImage' : 'coverImage';
-            editingGame = { ...editingGame, [field]: path };
-          } catch (error) {
-            artworkError = String(error);
-          } finally {
-            artworkBusy = null;
-          }
         })
       : Promise.resolve(() => {});
 
@@ -456,7 +436,6 @@
       selectedListener.then((unsubscribe) => unsubscribe());
       unlistenDisplaySync.then((unsubscribe) => unsubscribe());
       unlistenLibrarySync.then((unsubscribe) => unsubscribe());
-      unlistenGooglePicked.then((unsubscribe) => unsubscribe());
       unlistenGameFinished.then((unsubscribe) => unsubscribe());
       gamepadLoop.stop();
       window.removeEventListener('keydown', onKeyDown);
@@ -967,17 +946,6 @@
     }
   }
 
-
-  async function openGoogleSearchWindow() {
-    const query = artworkQuery.trim() || editingGame?.title.trim() || '';
-    if (!query) return;
-    artworkError = null;
-    try {
-      await openGoogleImagePicker(query);
-    } catch (error) {
-      artworkError = String(error);
-    }
-  }
 
   async function applyRaArtwork(url: string | null, kind: 'cover' | 'hero' | 'logo') {
     if (!url || !editingGame) return;
@@ -1514,9 +1482,6 @@
                 <button type="button" class:selected={artworkSource === 'steamgriddb'} on:click={() => (artworkSource = 'steamgriddb')}>
                   SteamGridDB
                 </button>
-                <button type="button" class:selected={artworkSource === 'google'} on:click={() => (artworkSource = 'google')}>
-                  Google
-                </button>
                 {#if effectiveAchievements(editingGame)}
                   <button
                     type="button"
@@ -1547,22 +1512,6 @@
                   Search
                 </button>
               </div>
-            {:else if artworkSource === 'google'}
-              <div class="path-row">
-                <input bind:value={artworkQuery} placeholder="Search query" />
-                <select bind:value={googleArtworkKind} title="Target image field">
-                  <option value="cover">Cover</option>
-                  <option value="hero">Hero</option>
-                  <option value="logo">Logo</option>
-                </select>
-                <button type="button" on:click={openGoogleSearchWindow}>
-                  <Image size={16} />
-                  Open Google
-                </button>
-              </div>
-              <small class="merge-hint">
-                A new window opens. Browse Google Images, then right-click an image and pick "Open image in new tab" — the launcher will capture it as {googleArtworkKind} and close the window.
-              </small>
             {/if}
 
             {#if artworkBusy}

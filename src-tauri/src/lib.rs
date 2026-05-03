@@ -1953,63 +1953,6 @@ fn google_download_artwork(
     Ok(path.to_string_lossy().to_string())
 }
 
-const GOOGLE_PICKER_LABEL: &str = "google-image-picker";
-
-fn host_is_google_owned(host: &str) -> bool {
-    let host = host.to_lowercase();
-    host.contains("google.com")
-        || host.contains("gstatic.com")
-        || host.contains("googleusercontent.com")
-        || host.contains("googleapis.com")
-        || host.contains("youtube.com")
-        || host.contains("youtu.be")
-        || host.contains("ytimg.com")
-        || host == "consent.google.com"
-}
-
-#[tauri::command]
-fn open_google_image_picker(app: AppHandle, query: String) -> Result<(), String> {
-    if let Some(existing) = app.get_webview_window(GOOGLE_PICKER_LABEL) {
-        let _ = existing.close();
-    }
-
-    let trimmed = query.trim();
-    let encoded = urlencoding::encode(trimmed);
-    let url_str = format!(
-        "https://www.google.com/search?q={encoded}&udm=2&safe=active&hl=en"
-    );
-    let url = reqwest::Url::parse(&url_str).map_err(|error| format!("Invalid URL: {error}"))?;
-
-    let app_handle = app.clone();
-
-    WebviewWindowBuilder::new(&app, GOOGLE_PICKER_LABEL, WebviewUrl::External(url))
-        .title(format!("Pick image — {trimmed}"))
-        .inner_size(1200.0, 820.0)
-        .min_inner_size(640.0, 480.0)
-        .resizable(true)
-        .decorations(true)
-        .on_navigation(move |target| {
-            let host = target.host_str().unwrap_or("");
-            if host.is_empty() || host_is_google_owned(host) {
-                return true;
-            }
-            let url_string = target.as_str().to_string();
-            let _ = app_handle.emit("google-image-picked", &url_string);
-
-            let inner = app_handle.clone();
-            std::thread::spawn(move || {
-                if let Some(window) = inner.get_webview_window(GOOGLE_PICKER_LABEL) {
-                    let _ = window.close();
-                }
-            });
-            false
-        })
-        .build()
-        .map_err(|error| format!("Unable to open Google picker: {error}"))?;
-
-    Ok(())
-}
-
 #[tauri::command]
 fn arrange_displays(app: AppHandle, assignment: State<DisplayAssignment>) -> Result<(), String> {
     let swapped = *assignment
@@ -2079,7 +2022,6 @@ pub fn run() {
             steamgriddb_game_artwork,
             steamgriddb_download_artwork,
             google_download_artwork,
-            open_google_image_picker,
             arrange_displays,
             swap_displays
         ])
