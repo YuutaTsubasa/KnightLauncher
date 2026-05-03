@@ -22,7 +22,7 @@
     Trophy,
     Unlink
   } from 'lucide-svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { convertFileSrc } from '@tauri-apps/api/core';
   import { emit, listen } from '@tauri-apps/api/event';
   import { get } from 'svelte/store';
@@ -187,6 +187,17 @@
     });
 
     return bestIdx >= 0 ? list[bestIdx].id : null;
+  }
+
+  $: if ($selectedId) scrollSelectedCardIntoView($selectedId);
+
+  async function scrollSelectedCardIntoView(targetId: string) {
+    await tick();
+    const cards = document.querySelectorAll<HTMLElement>('.game-card');
+    const list = $filteredGames;
+    const index = list.findIndex((entry) => entry.id === targetId);
+    if (index < 0 || !cards[index]) return;
+    cards[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function handleArrowDirection(direction: ArrowDirection) {

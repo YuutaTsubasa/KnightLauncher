@@ -410,8 +410,13 @@ h1 {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 26px 22px;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  scrollbar-width: none;
   padding: 4px 2px 18px;
+}
+
+.game-grid::-webkit-scrollbar {
+  display: none;
 }
 
 .game-card {

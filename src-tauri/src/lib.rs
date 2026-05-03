@@ -1349,19 +1349,34 @@ fn remove_game(app: AppHandle, id: String) -> Result<Library, String> {
     Ok(library)
 }
 
-fn normalize_positions(library: &mut Library) {
-    if !library.games.iter().all(|game| game.position == 0) {
+fn ensure_positions(library: &mut Library) {
+    if library.games.is_empty() {
         return;
     }
-    let mut sorted_ids: Vec<(String, String)> = library
+    if library.games.iter().all(|game| game.position == 0) {
+        let mut order: Vec<usize> = (0..library.games.len()).collect();
+        order.sort_by(|&a, &b| {
+            library.games[a]
+                .title
+                .to_lowercase()
+                .cmp(&library.games[b].title.to_lowercase())
+        });
+        for (index, &original) in order.iter().enumerate() {
+            library.games[original].position = (index as u32) + 1;
+        }
+        return;
+    }
+    let mut next = library
         .games
         .iter()
-        .map(|game| (game.id.clone(), game.title.to_lowercase()))
-        .collect();
-    sorted_ids.sort_by(|a, b| a.1.cmp(&b.1));
-    for (index, (id, _)) in sorted_ids.iter().enumerate() {
-        if let Some(game) = library.games.iter_mut().find(|game| &game.id == id) {
-            game.position = (index as u32) + 1;
+        .map(|game| game.position)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    for game in library.games.iter_mut() {
+        if game.position == 0 {
+            game.position = next;
+            next = next.saturating_add(1);
         }
     }
 }
@@ -1386,7 +1401,7 @@ fn swap_game_positions(
         return read_library_from_disk(&app);
     }
     let mut library = read_library_from_disk(&app)?;
-    normalize_positions(&mut library);
+    ensure_positions(&mut library);
 
     let pos_a = library
         .games
@@ -1773,6 +1788,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
         }
     }
 
+    ensure_positions(&mut library);
     library
         .games
         .sort_by_key(|game| game.title.to_lowercase());
