@@ -48,6 +48,7 @@
   import {
     addExecutable,
     busyLabel,
+    deleteGameById,
     displays,
     effectiveAchievements,
     errorMessage,
@@ -849,6 +850,19 @@
 
   function closeEditor() {
     editingGame = null;
+  }
+
+  async function deleteFromEditor() {
+    if (!editingGame) return;
+    const confirmed = window.confirm(
+      `Delete "${editingGame.title}" from the library? The actual game / ROM files stay on disk.`
+    );
+    if (!confirmed) return;
+    const id = editingGame.id;
+    closeEditor();
+    try {
+      await deleteGameById(id);
+    } catch {}
   }
 
   async function saveEditor() {
@@ -1786,6 +1800,8 @@
         </div>
 
         <div class="edit-actions">
+          <button class="delete" on:click={deleteFromEditor}>Delete</button>
+          <span class="edit-actions-spacer"></span>
           <button on:click={closeEditor}>Cancel</button>
           <button class="save" on:click={saveEditor}>Save</button>
         </div>

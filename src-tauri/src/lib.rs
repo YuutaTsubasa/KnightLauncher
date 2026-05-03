@@ -516,6 +516,8 @@ const EMU_SYSTEMS: &[EmuSystem] = &[
     EmuSystem { folder: "sega32x", platform_id: "32x", extensions: &["32x", "md", "smd", "bin"], launchers: &["retroarch"] },
     EmuSystem { folder: "segacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
     EmuSystem { folder: "megacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
+    EmuSystem { folder: "sega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
+    EmuSystem { folder: "mega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
     EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"] },
     EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"] },
     EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"] },
@@ -1689,7 +1691,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
         let mut groups: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
         for entry in WalkDir::new(&system_dir)
-            .max_depth(4)
+            .max_depth(6)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())

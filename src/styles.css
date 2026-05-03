@@ -1032,6 +1032,20 @@ h1 {
   gap: 10px;
 }
 
+.edit-actions-spacer {
+  flex: 1;
+}
+
+.edit-actions button.delete {
+  color: #9d3039;
+  background: rgba(226, 88, 74, 0.12);
+  border-color: rgba(226, 88, 74, 0.4);
+}
+
+.edit-actions button.delete:hover {
+  background: rgba(226, 88, 74, 0.24);
+}
+
 .edit-actions button.save {
   color: #251800;
   font-weight: 900;

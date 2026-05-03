@@ -194,6 +194,21 @@ export async function deleteSelectedGame() {
   notifyLibraryChanged().catch(() => {});
 }
 
+export async function deleteGameById(gameId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await removeGame(gameId);
+    games.set(library.games);
+    if (get(selectedId) === gameId) {
+      selectedId.set(library.games[0]?.id ?? null);
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  }
+}
+
 export async function launchSelectedGame() {
   const game = get(selectedGame);
   if (!game) return;
