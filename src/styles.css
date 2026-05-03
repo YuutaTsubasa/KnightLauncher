@@ -153,10 +153,11 @@ main.detail-only .hero-logo {
 
 .hero-copy {
   display: grid;
-  width: 100%;
-  max-width: 760px;
+  width: min(760px, 100%);
   place-items: center;
-  margin: auto;
+  align-self: center;
+  margin-inline: auto;
+  margin-block: auto;
   text-align: center;
 }
 

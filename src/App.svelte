@@ -27,6 +27,7 @@
   import { emit, listen } from '@tauri-apps/api/event';
   import { get } from 'svelte/store';
   import { fade, fly } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     arrangeDisplays,
     loadSettings,
@@ -1033,13 +1034,13 @@
               class="hero-logo"
               src={imageUrl($selectedGame.logoImage)}
               alt={$selectedGame.title}
-              in:fly={{ y: 28, duration: 380, delay: 80 }}
-              out:fade={{ duration: 200 }}
+              in:fly={{ y: 56, duration: 520, delay: 120, easing: cubicOut }}
+              out:fade={{ duration: 220 }}
             />
           {:else}
             <h1
-              in:fly={{ y: 28, duration: 380, delay: 80 }}
-              out:fade={{ duration: 200 }}
+              in:fly={{ y: 56, duration: 520, delay: 120, easing: cubicOut }}
+              out:fade={{ duration: 220 }}
             >{$selectedGame.title}</h1>
           {/if}
         {/key}
