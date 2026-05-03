@@ -1944,6 +1944,7 @@ name = "knightlauncher"
 version = "0.1.11"
 dependencies = [
  "chrono",
+ "regex",
  "reqwest 0.12.28",
  "rfd",
  "serde",

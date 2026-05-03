@@ -21,7 +21,6 @@ use walkdir::WalkDir;
 const DETAIL_WINDOW: &str = "detail";
 const LIBRARY_WINDOW: &str = "main";
 const STEAMGRIDDB_API_BASE: &str = "https://www.steamgriddb.com/api/v2";
-const GOOGLE_CUSTOM_SEARCH_URL: &str = "https://www.googleapis.com/customsearch/v1";
 
 #[derive(Default)]
 struct DisplayAssignment {
@@ -118,8 +117,6 @@ pub struct Library {
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub steamgriddb_api_key: Option<String>,
-    pub google_api_key: Option<String>,
-    pub google_search_engine_id: Option<String>,
     #[serde(default)]
     pub emudeck_root: Option<String>,
     #[serde(default)]
@@ -204,33 +201,6 @@ pub struct GoogleImageResult {
     pub mime: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct GoogleSearchResponse {
-    #[serde(default)]
-    items: Vec<GoogleSearchItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GoogleSearchItem {
-    #[serde(default)]
-    title: String,
-    link: String,
-    #[serde(default)]
-    mime: Option<String>,
-    image: GoogleSearchImage,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GoogleSearchImage {
-    #[serde(default)]
-    context_link: Option<String>,
-    #[serde(default)]
-    height: Option<u32>,
-    #[serde(default)]
-    width: Option<u32>,
-    thumbnail_link: String,
-}
 
 #[derive(Debug, Clone)]
 struct MonitorLayout {
@@ -326,26 +296,6 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
     }
 
     Ok(key)
-}
-
-fn google_search_settings(app: &AppHandle) -> Result<(String, String), String> {
-    let settings = read_settings_from_disk(app)?;
-    let api_key = settings
-        .google_api_key
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let search_engine_id = settings
-        .google_search_engine_id
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-
-    if api_key.is_empty() || search_engine_id.is_empty() {
-        return Err("Google Search API key or Search Engine ID is not configured.".to_string());
-    }
-
-    Ok((api_key, search_engine_id))
 }
 
 fn http_client() -> Result<Client, String> {
@@ -1335,8 +1285,6 @@ fn load_settings(app: AppHandle) -> Result<AppSettings, String> {
 fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
     let settings = AppSettings {
         steamgriddb_api_key: normalize_optional_secret(settings.steamgriddb_api_key),
-        google_api_key: normalize_optional_secret(settings.google_api_key),
-        google_search_engine_id: normalize_optional_secret(settings.google_search_engine_id),
         emudeck_root: normalize_optional_secret(settings.emudeck_root),
         retro_achievements_user: normalize_optional_secret(settings.retro_achievements_user),
         retro_achievements_api_key: normalize_optional_secret(settings.retro_achievements_api_key),
@@ -1960,49 +1908,85 @@ fn steamgriddb_download_artwork(
     Ok(path.to_string_lossy().to_string())
 }
 
+fn parse_google_image_html(html: &str) -> Vec<GoogleImageResult> {
+    let pattern = match regex::Regex::new(r#"\["(https?://[^"\\\s]+)",\s*(\d+),\s*(\d+)\]"#) {
+        Ok(pattern) => pattern,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut results: Vec<GoogleImageResult> = Vec::new();
+
+    for cap in pattern.captures_iter(html) {
+        let url = cap[1].to_string();
+        let width: u32 = cap[2].parse().unwrap_or(0);
+        let height: u32 = cap[3].parse().unwrap_or(0);
+
+        if width < 120 || height < 120 {
+            continue;
+        }
+        if url.contains("gstatic.com") || url.contains("google.com/logos") {
+            continue;
+        }
+        let lower = url.to_lowercase();
+        if lower.ends_with(".svg") || lower.ends_with(".gif") {
+            continue;
+        }
+        if !seen.insert(url.clone()) {
+            continue;
+        }
+
+        results.push(GoogleImageResult {
+            title: String::new(),
+            link: url.clone(),
+            thumbnail: url,
+            context_link: None,
+            width: Some(width),
+            height: Some(height),
+            mime: None,
+        });
+
+        if results.len() >= 32 {
+            break;
+        }
+    }
+
+    results
+}
+
 #[tauri::command]
-fn google_image_search(app: AppHandle, query: String) -> Result<Vec<GoogleImageResult>, String> {
+fn google_image_search(_app: AppHandle, query: String) -> Result<Vec<GoogleImageResult>, String> {
     let query = query.trim();
     if query.is_empty() {
         return Ok(Vec::new());
     }
 
-    let (api_key, search_engine_id) = google_search_settings(&app)?;
+    let encoded = urlencoding::encode(query);
+    let url = format!(
+        "https://www.google.com/search?q={encoded}&tbm=isch&safe=active&hl=en&pws=0"
+    );
+
     let response = http_client()?
-        .get(GOOGLE_CUSTOM_SEARCH_URL)
-        .query(&[
-            ("key", api_key.as_str()),
-            ("cx", search_engine_id.as_str()),
-            ("q", query),
-            ("searchType", "image"),
-            ("num", "10"),
-            ("safe", "active"),
-        ])
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .header("Cookie", "CONSENT=YES+cb")
         .send()
-        .map_err(|error| format!("Unable to reach Google Search: {error}"))?;
+        .map_err(|error| format!("Unable to reach Google Images: {error}"))?;
 
     let status = response.status();
     if !status.is_success() {
-        return Err(format!("Google Search returned HTTP {status}."));
+        return Err(format!("Google Images returned HTTP {status}."));
     }
 
-    let payload = response
-        .json::<GoogleSearchResponse>()
-        .map_err(|error| format!("Unable to read Google Search response: {error}"))?;
+    let html = response
+        .text()
+        .map_err(|error| format!("Unable to read Google Images response: {error}"))?;
 
-    Ok(payload
-        .items
-        .into_iter()
-        .map(|item| GoogleImageResult {
-            title: item.title,
-            link: item.link,
-            thumbnail: item.image.thumbnail_link,
-            context_link: item.image.context_link,
-            width: item.image.width,
-            height: item.image.height,
-            mime: item.mime,
-        })
-        .collect())
+    Ok(parse_google_image_html(&html))
 }
 
 #[tauri::command]

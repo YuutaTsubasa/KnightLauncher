@@ -209,8 +209,6 @@
   }
   let artworkSource: 'steamgriddb' | 'google' | 'retroachievements' = 'steamgriddb';
   let steamGridDbApiKey = '';
-  let googleApiKey = '';
-  let googleSearchEngineId = '';
   let retroAchievementsUser = '';
   let retroAchievementsApiKey = '';
   let raSearchQuery = '';
@@ -248,8 +246,6 @@
     loadSettings()
       .then((settings) => {
         steamGridDbApiKey = settings.steamgriddbApiKey ?? '';
-        googleApiKey = settings.googleApiKey ?? '';
-        googleSearchEngineId = settings.googleSearchEngineId ?? '';
         retroAchievementsUser = settings.retroAchievementsUser ?? '';
         retroAchievementsApiKey = settings.retroAchievementsApiKey ?? '';
       })
@@ -893,13 +889,9 @@
       const current = await loadSettings();
       const settings = await saveSettings({
         ...current,
-        steamgriddbApiKey: steamGridDbApiKey.trim() || null,
-        googleApiKey: googleApiKey.trim() || null,
-        googleSearchEngineId: googleSearchEngineId.trim() || null
+        steamgriddbApiKey: steamGridDbApiKey.trim() || null
       });
       steamGridDbApiKey = settings.steamgriddbApiKey ?? '';
-      googleApiKey = settings.googleApiKey ?? '';
-      googleSearchEngineId = settings.googleSearchEngineId ?? '';
     } catch (error) {
       artworkError = String(error);
     } finally {
@@ -959,26 +951,6 @@
     }
   }
 
-  async function saveGoogleSettings() {
-    artworkBusy = 'Saving Google Search settings';
-    artworkError = null;
-    try {
-      const current = await loadSettings();
-      const settings = await saveSettings({
-        ...current,
-        steamgriddbApiKey: steamGridDbApiKey.trim() || null,
-        googleApiKey: googleApiKey.trim() || null,
-        googleSearchEngineId: googleSearchEngineId.trim() || null
-      });
-      steamGridDbApiKey = settings.steamgriddbApiKey ?? '';
-      googleApiKey = settings.googleApiKey ?? '';
-      googleSearchEngineId = settings.googleSearchEngineId ?? '';
-    } catch (error) {
-      artworkError = String(error);
-    } finally {
-      artworkBusy = null;
-    }
-  }
 
   async function searchGoogleArtwork() {
     const query = artworkQuery.trim() || editingGame?.title.trim() || '';
@@ -1582,25 +1554,6 @@
                 </button>
               </div>
             {:else if artworkSource === 'google'}
-              <div class="path-row">
-                <input
-                  type="password"
-                  bind:value={googleApiKey}
-                  placeholder="Google API key"
-                  autocomplete="off"
-                />
-              </div>
-
-              <div class="path-row">
-                <input
-                  type="password"
-                  bind:value={googleSearchEngineId}
-                  placeholder="Programmable Search Engine ID"
-                  autocomplete="off"
-                />
-                <button type="button" on:click={saveGoogleSettings}>Save</button>
-              </div>
-
               <div class="path-row">
                 <input bind:value={artworkQuery} placeholder="Search Google Images" />
                 <select bind:value={googleArtworkKind} title="Target image field">

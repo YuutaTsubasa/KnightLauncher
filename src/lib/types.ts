@@ -90,8 +90,6 @@ export type SortMode = 'title' | 'recent' | 'playCount' | 'manual';
 
 export type AppSettings = {
   steamgriddbApiKey: string | null;
-  googleApiKey: string | null;
-  googleSearchEngineId: string | null;
   emudeckRoot: string | null;
   retroAchievementsUser: string | null;
   retroAchievementsApiKey: string | null;

@@ -22,8 +22,6 @@ export async function loadSettings(): Promise<AppSettings> {
   if (!isTauri) {
     return {
       steamgriddbApiKey: null,
-      googleApiKey: null,
-      googleSearchEngineId: null,
       emudeckRoot: null,
       retroAchievementsUser: null,
       retroAchievementsApiKey: null
