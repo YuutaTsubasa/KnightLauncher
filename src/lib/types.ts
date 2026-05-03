@@ -69,6 +69,7 @@ export type Game = {
   position: number;
   hidden: boolean;
   preferredAchievementVariantId: string | null;
+  steamAppId: string | null;
 };
 
 export type GameLibrary = {
@@ -94,6 +95,7 @@ export type AppSettings = {
   emudeckRoot: string | null;
   retroAchievementsUser: string | null;
   retroAchievementsApiKey: string | null;
+  steamRoot: string | null;
 };
 
 export type SteamGridDbGame = {

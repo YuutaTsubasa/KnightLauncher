@@ -18,6 +18,7 @@ import {
   saveLibrary,
   scanEmudeckRoms,
   scanFolder,
+  scanSteamLibrary,
   selectExecutable,
   selectFolder,
   setGameHidden,
@@ -399,6 +400,30 @@ export async function setPreferredVariantForAchievements(gameId: string, variant
     notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
+  }
+}
+
+export async function scanForSteam() {
+  busyLabel.set('Scanning Steam library');
+  errorMessage.set(null);
+  try {
+    let library = await scanSteamLibrary(null).catch(async (error) => {
+      const message = String(error);
+      if (!message.toLowerCase().includes('steam install not found')) {
+        throw error;
+      }
+      const folder = await selectFolder();
+      if (!folder) return null;
+      return scanSteamLibrary(folder);
+    });
+    if (!library) return;
+    games.set(library.games);
+    selectedId.set(library.games[0]?.id ?? null);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
   }
 }
 

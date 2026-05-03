@@ -9,6 +9,7 @@
     FolderSearch,
     Gamepad2,
     Joystick,
+    LibraryBig,
     Library,
     Move,
     Pencil,
@@ -74,6 +75,7 @@
     saveGameEdits,
     scanForGames,
     scanForRoms,
+    scanForSteam,
     selectedGame,
     selectedId,
     setPreferredVariantForAchievements,
@@ -1119,6 +1121,9 @@
           </button>
           <button title="Scan EmuDeck ROMs" on:click={scanForRoms}>
             <Joystick size={18} />
+          </button>
+          <button title="Scan Steam library" on:click={scanForSteam}>
+            <LibraryBig size={18} />
           </button>
           <button
             title={$selectedGame?.hidden ? 'Unhide selected' : 'Hide selected'}

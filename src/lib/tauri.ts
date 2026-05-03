@@ -23,7 +23,8 @@ export async function loadSettings(): Promise<AppSettings> {
       steamgriddbApiKey: null,
       emudeckRoot: null,
       retroAchievementsUser: null,
-      retroAchievementsApiKey: null
+      retroAchievementsApiKey: null,
+      steamRoot: null
     };
   }
   return invoke<AppSettings>('load_settings');
@@ -77,6 +78,11 @@ export async function scanFolder(path: string): Promise<Game[]> {
 export async function scanEmudeckRoms(root: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('scan_emudeck_roms', { root });
+}
+
+export async function scanSteamLibrary(steamRoot: string | null): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('scan_steam_library', { steamRoot });
 }
 
 export async function launchGame(id: string): Promise<GameLibrary> {
@@ -232,7 +238,8 @@ const demoGames: Game[] = [
     retroAchievements: null,
     position: 0,
     hidden: false,
-    preferredAchievementVariantId: null
+    preferredAchievementVariantId: null,
+    steamAppId: null
   },
   {
     id: 'demo-hades',
@@ -254,7 +261,8 @@ const demoGames: Game[] = [
     retroAchievements: null,
     position: 0,
     hidden: false,
-    preferredAchievementVariantId: null
+    preferredAchievementVariantId: null,
+    steamAppId: null
   },
   {
     id: 'demo-cyberpunk',
@@ -276,6 +284,7 @@ const demoGames: Game[] = [
     retroAchievements: null,
     position: 0,
     hidden: false,
-    preferredAchievementVariantId: null
+    preferredAchievementVariantId: null,
+    steamAppId: null
   }
 ];

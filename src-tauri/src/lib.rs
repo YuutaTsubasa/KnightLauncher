@@ -107,6 +107,8 @@ pub struct Game {
     pub hidden: bool,
     #[serde(default)]
     pub preferred_achievement_variant_id: Option<String>,
+    #[serde(default)]
+    pub steam_app_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -125,6 +127,8 @@ pub struct AppSettings {
     pub retro_achievements_user: Option<String>,
     #[serde(default)]
     pub retro_achievements_api_key: Option<String>,
+    #[serde(default)]
+    pub steam_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -488,6 +492,7 @@ fn game_from_executable(path: PathBuf) -> Game {
         position: 0,
         hidden: false,
         preferred_achievement_variant_id: None,
+        steam_app_id: None,
     }
 }
 
@@ -1320,6 +1325,7 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
         emudeck_root: normalize_optional_secret(settings.emudeck_root),
         retro_achievements_user: normalize_optional_secret(settings.retro_achievements_user),
         retro_achievements_api_key: normalize_optional_secret(settings.retro_achievements_api_key),
+        steam_root: normalize_optional_secret(settings.steam_root),
     };
     write_settings_to_disk(&app, &settings)?;
     Ok(settings)
@@ -1548,6 +1554,7 @@ fn split_variant(
         position,
         hidden: false,
         preferred_achievement_variant_id: None,
+        steam_app_id: None,
     };
     library.games.push(new_game);
 
@@ -1622,32 +1629,231 @@ fn scan_folder(path: String) -> Result<Vec<Game>, String> {
     Ok(games)
 }
 
+fn find_default_steam_root() -> Option<PathBuf> {
+    let candidates = [
+        r"C:\Program Files (x86)\Steam",
+        r"C:\Program Files\Steam",
+    ];
+    for candidate in candidates.iter() {
+        let path = PathBuf::from(candidate);
+        if path.is_dir() && path.join("steamapps").is_dir() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn extract_vdf_value(content: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\"", key);
+    let start = content.find(&needle)?;
+    let after = &content[start + needle.len()..];
+    let q1 = after.find('"')?;
+    let after = &after[q1 + 1..];
+    let q2 = after.find('"')?;
+    Some(after[..q2].to_string())
+}
+
+fn parse_library_folders(path: &Path) -> Vec<PathBuf> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut paths = Vec::new();
+    let mut cursor = content.as_str();
+    while let Some(idx) = cursor.find("\"path\"") {
+        let after = &cursor[idx + 6..];
+        let Some(q1) = after.find('"') else { break; };
+        let after = &after[q1 + 1..];
+        let Some(q2) = after.find('"') else { break; };
+        let raw = &after[..q2];
+        let normalized = raw.replace("\\\\", "\\");
+        let candidate = PathBuf::from(normalized);
+        if candidate.join("steamapps").is_dir() {
+            paths.push(candidate);
+        }
+        cursor = &after[q2 + 1..];
+    }
+    paths
+}
+
+#[tauri::command]
+fn scan_steam_library(
+    app: AppHandle,
+    steam_root: Option<String>,
+) -> Result<Library, String> {
+    let provided = steam_root
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let saved = read_settings_from_disk(&app)
+        .ok()
+        .and_then(|settings| settings.steam_root)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let root = if let Some(value) = provided.clone() {
+        PathBuf::from(value)
+    } else if let Some(value) = saved {
+        PathBuf::from(value)
+    } else if let Some(value) = find_default_steam_root() {
+        value
+    } else {
+        return Err(
+            "Steam install not found. Please pick the Steam folder manually.".to_string(),
+        );
+    };
+
+    if !root.is_dir() || !root.join("steamapps").is_dir() {
+        return Err(format!(
+            "Steam install not found under {}.",
+            root.display()
+        ));
+    }
+
+    let mut settings = read_settings_from_disk(&app).unwrap_or_default();
+    settings.steam_root = Some(root.to_string_lossy().to_string());
+    write_settings_to_disk(&app, &settings)?;
+
+    let mut libraries: Vec<PathBuf> = Vec::new();
+    libraries.push(root.clone());
+    let library_folders_vdf = root.join("steamapps").join("libraryfolders.vdf");
+    for extra in parse_library_folders(&library_folders_vdf) {
+        if !libraries.iter().any(|existing| existing == &extra) {
+            libraries.push(extra);
+        }
+    }
+
+    let mut library = read_library_from_disk(&app)?;
+    let already_app_ids: HashSet<String> = library
+        .games
+        .iter()
+        .filter_map(|game| game.steam_app_id.clone())
+        .collect();
+    let cdn_base = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps";
+
+    for steam_lib in libraries {
+        let steamapps = steam_lib.join("steamapps");
+        let entries = match fs::read_dir(&steamapps) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if !name_str.starts_with("appmanifest_") || !name_str.ends_with(".acf") {
+                continue;
+            }
+            let manifest_path = entry.path();
+            let Ok(content) = fs::read_to_string(&manifest_path) else {
+                continue;
+            };
+
+            let Some(app_id) = extract_vdf_value(&content, "appid") else {
+                continue;
+            };
+            if already_app_ids.contains(&app_id) {
+                continue;
+            }
+
+            let state_flags = extract_vdf_value(&content, "StateFlags")
+                .and_then(|value| value.parse::<u32>().ok())
+                .unwrap_or(0);
+            if state_flags & 4 == 0 {
+                continue;
+            }
+
+            let title = extract_vdf_value(&content, "name")
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| format!("Steam app {app_id}"));
+
+            let cover_url = format!("{cdn_base}/{app_id}/library_600x900_2x.jpg");
+            let hero_url = format!("{cdn_base}/{app_id}/library_hero.jpg");
+            let logo_url = format!("{cdn_base}/{app_id}/logo.png");
+
+            let cache = artwork_dir(&app)?;
+            let cover_image =
+                download_to(&cover_url, &cache.join(format!("steam-{app_id}-cover.jpg"))).ok();
+            let hero_image =
+                download_to(&hero_url, &cache.join(format!("steam-{app_id}-hero.jpg"))).ok();
+            let logo_image =
+                download_to(&logo_url, &cache.join(format!("steam-{app_id}-logo.png"))).ok();
+
+            let position = next_position(&library);
+            library.games.push(Game {
+                id: Uuid::new_v4().to_string(),
+                title,
+                executable_path: String::new(),
+                launch_args: String::new(),
+                working_directory: String::new(),
+                cover_image,
+                hero_image,
+                logo_image,
+                favorite: false,
+                last_played_at: None,
+                play_count: 0,
+                description: None,
+                platform: Some("Steam".to_string()),
+                tags: Vec::new(),
+                rom_system: None,
+                variants: Vec::new(),
+                retro_achievements: None,
+                position,
+                hidden: false,
+                preferred_achievement_variant_id: None,
+                steam_app_id: Some(app_id),
+            });
+        }
+    }
+
+    ensure_positions(&mut library);
+    library
+        .games
+        .sort_by_key(|game| game.title.to_lowercase());
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
 #[tauri::command]
 fn launch_game(app: AppHandle, id: String) -> Result<Library, String> {
     let mut library = read_library_from_disk(&app)?;
-    let Some(game) = library.games.iter_mut().find(|game| game.id == id) else {
+    let Some(idx) = library.games.iter().position(|game| game.id == id) else {
         return Err("Game not found.".to_string());
     };
 
-    let executable = PathBuf::from(&game.executable_path);
-    if !executable.exists() {
-        return Err("Executable path no longer exists.".to_string());
-    }
+    let game_id = library.games[idx].id.clone();
+    let game_title = library.games[idx].title.clone();
+    let steam_app_id = library.games[idx].steam_app_id.clone();
 
-    let mut command = Command::new(&game.executable_path);
-    if !game.working_directory.trim().is_empty() {
-        command.current_dir(&game.working_directory);
-    }
-    for arg in game.launch_args.split_whitespace() {
-        command.arg(arg);
-    }
+    let child = if let Some(app_id) = steam_app_id.filter(|value| !value.trim().is_empty()) {
+        let mut command = Command::new("cmd");
+        command
+            .arg("/c")
+            .arg("start")
+            .arg("")
+            .arg(format!("steam://rungameid/{}", app_id.trim()));
+        command
+            .spawn()
+            .map_err(|error| format!("Unable to launch Steam app {app_id}: {error}"))?
+    } else {
+        let game = &library.games[idx];
+        let executable = PathBuf::from(&game.executable_path);
+        if game.executable_path.trim().is_empty() || !executable.exists() {
+            return Err("Executable path no longer exists.".to_string());
+        }
+        let mut command = Command::new(&game.executable_path);
+        if !game.working_directory.trim().is_empty() {
+            command.current_dir(&game.working_directory);
+        }
+        for arg in game.launch_args.split_whitespace() {
+            command.arg(arg);
+        }
+        command
+            .spawn()
+            .map_err(|error| format!("Unable to launch {}: {error}", game_title))?
+    };
 
-    let child = command
-        .spawn()
-        .map_err(|error| format!("Unable to launch {}: {error}", game.title))?;
-    let game_id = game.id.clone();
     handoff_focus_to_child(&app, child, game_id, None);
 
+    let game = &mut library.games[idx];
     game.last_played_at = Some(Utc::now().to_rfc3339());
     game.play_count = game.play_count.saturating_add(1);
     write_library_to_disk(&app, &library)?;
@@ -1801,6 +2007,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                     position: 0,
                     hidden: false,
                     preferred_achievement_variant_id: None,
+                    steam_app_id: None,
                 });
             }
         }
@@ -2068,6 +2275,7 @@ pub fn run() {
             select_folder,
             scan_folder,
             scan_emudeck_roms,
+            scan_steam_library,
             launch_game,
             launch_rom_variant,
             retroachievements_search_games,
