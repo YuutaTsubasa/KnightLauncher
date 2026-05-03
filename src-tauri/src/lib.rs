@@ -351,7 +351,7 @@ fn google_search_settings(app: &AppHandle) -> Result<(String, String), String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.10")
+        .user_agent("KnightLauncher/0.1.11")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
