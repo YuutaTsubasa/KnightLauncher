@@ -648,6 +648,7 @@ fn ra_console_id(platform_id: &str) -> Option<u32> {
         "gba" => Some(5),
         "gbc" => Some(6),
         "fc" => Some(7),
+        "segacd" => Some(9),
         "32x" => Some(10),
         "sms" => Some(11),
         "ps1" => Some(12),

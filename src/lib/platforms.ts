@@ -347,6 +347,7 @@ const RA_SUPPORTED_IDS = new Set([
   'gba',
   'gbc',
   'fc',
+  'segacd',
   '32x',
   'sms',
   'ps1',
