@@ -1670,6 +1670,16 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
 
     let mut library = read_library_from_disk(&app)?;
 
+    let already_tracked: HashSet<String> = library
+        .games
+        .iter()
+        .flat_map(|game| {
+            game.variants
+                .iter()
+                .map(|variant| variant.rom_path.to_lowercase())
+        })
+        .collect();
+
     for system in EMU_SYSTEMS {
         let system_dir = roms_dir.join(system.folder);
         if !system_dir.is_dir() {
@@ -1695,6 +1705,10 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                 .iter()
                 .any(|allowed| allowed.eq_ignore_ascii_case(&extension))
             {
+                continue;
+            }
+            let path_lower = path.to_string_lossy().to_lowercase();
+            if already_tracked.contains(&path_lower) {
                 continue;
             }
 
