@@ -21,6 +21,7 @@ import pspSymbol from '../assets/platforms/psp.png';
 import vitaSymbol from '../assets/platforms/vita.png';
 import androidSymbol from '../assets/platforms/android.png';
 import sega32xSymbol from '../assets/platforms/32x.png';
+import segacdSymbol from '../assets/platforms/segacd.png';
 
 export type PlatformIcon =
   | { kind: 'svg'; viewBox: string; path: string }
@@ -219,6 +220,13 @@ export const PLATFORMS: Platform[] = [
     icon: { kind: 'png', src: sega32xSymbol }
   },
   {
+    id: 'segacd',
+    label: 'Sega CD / Mega CD',
+    color1: '#2A5DB0',
+    color2: '#4F8FE8',
+    icon: { kind: 'png', src: segacdSymbol }
+  },
+  {
     id: 'other',
     label: 'Other',
     color1: '#4B5563',
@@ -312,7 +320,12 @@ const aliasMap: Record<string, string> = {
   sega32x: '32x',
   'sega 32x': '32x',
   'genesis 32x': '32x',
-  'mega drive 32x': '32x'
+  'mega drive 32x': '32x',
+  segacd: 'segacd',
+  'sega cd': 'segacd',
+  megacd: 'segacd',
+  'mega cd': 'segacd',
+  'sega cd / mega cd': 'segacd'
 };
 
 export function resolvePlatform(name: string | null | undefined): Platform {

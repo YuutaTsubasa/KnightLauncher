@@ -514,6 +514,8 @@ const EMU_SYSTEMS: &[EmuSystem] = &[
     EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
     EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
     EmuSystem { folder: "sega32x", platform_id: "32x", extensions: &["32x", "md", "smd", "bin"], launchers: &["retroarch"] },
+    EmuSystem { folder: "segacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
+    EmuSystem { folder: "megacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
     EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"] },
     EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"] },
     EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"] },
