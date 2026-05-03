@@ -18,7 +18,14 @@ export async function loadLibrary(): Promise<GameLibrary> {
 }
 
 export async function loadSettings(): Promise<AppSettings> {
-  if (!isTauri) return { steamgriddbApiKey: null, googleApiKey: null, googleSearchEngineId: null };
+  if (!isTauri) {
+    return {
+      steamgriddbApiKey: null,
+      googleApiKey: null,
+      googleSearchEngineId: null,
+      emudeckRoot: null
+    };
+  }
   return invoke<AppSettings>('load_settings');
 }
 
@@ -67,9 +74,19 @@ export async function scanFolder(path: string): Promise<Game[]> {
   return invoke<Game[]>('scan_folder', { path });
 }
 
+export async function scanEmudeckRoms(root: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('scan_emudeck_roms', { root });
+}
+
 export async function launchGame(id: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('launch_game', { id });
+}
+
+export async function launchRomVariant(gameId: string, variantId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('launch_rom_variant', { gameId, variantId });
 }
 
 export async function detectDisplays(): Promise<DisplayInfo[]> {
@@ -161,7 +178,9 @@ const demoGames: Game[] = [
     playCount: 18,
     description: 'A large action RPG profile used to preview the dual-screen layout.',
     platform: 'Windows',
-    tags: ['Action RPG', 'Favorite']
+    tags: ['Action RPG', 'Favorite'],
+    romSystem: null,
+    variants: []
   },
   {
     id: 'demo-hades',
@@ -177,7 +196,9 @@ const demoGames: Game[] = [
     playCount: 7,
     description: 'Fast launch profile with keyboard and controller friendly navigation.',
     platform: 'Windows',
-    tags: ['Roguelite']
+    tags: ['Roguelite'],
+    romSystem: null,
+    variants: []
   },
   {
     id: 'demo-cyberpunk',
@@ -193,6 +214,8 @@ const demoGames: Game[] = [
     playCount: 0,
     description: 'Example profile showing missing recent play data and launch arguments.',
     platform: 'Windows',
-    tags: ['RPG']
+    tags: ['RPG'],
+    romSystem: null,
+    variants: []
   }
 ];

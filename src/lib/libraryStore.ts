@@ -3,10 +3,12 @@ import type { DisplayInfo, Game, LibraryFilter, SortMode } from './types';
 import {
   detectDisplays,
   launchGame,
+  launchRomVariant,
   loadLibrary,
   notifyLibraryChanged,
   removeGame,
   saveLibrary,
+  scanEmudeckRoms,
   scanFolder,
   selectExecutable,
   selectFolder,
@@ -22,6 +24,7 @@ export const sortMode = writable<SortMode>('title');
 export const busyLabel = writable<string | null>(null);
 export const errorMessage = writable<string | null>(null);
 export const launchState = writable<string | null>(null);
+export const pickingVariantsFor = writable<Game | null>(null);
 
 export const selectedGame = derived([games, selectedId], ([$games, $selectedId]) => {
   return $games.find((game) => game.id === $selectedId) ?? $games[0] ?? null;
@@ -171,6 +174,14 @@ export async function launchSelectedGame() {
   const game = get(selectedGame);
   if (!game) return;
 
+  if (game.variants.length > 1) {
+    pickingVariantsFor.set(game);
+    return;
+  }
+  if (game.variants.length === 1) {
+    return launchVariant(game, game.variants[0].id);
+  }
+
   launchState.set(`Launching ${game.title}`);
   errorMessage.set(null);
 
@@ -183,6 +194,43 @@ export async function launchSelectedGame() {
     errorMessage.set(String(error));
   } finally {
     window.setTimeout(() => launchState.set(null), 900);
+  }
+}
+
+export async function launchVariant(game: Game, variantId: string) {
+  pickingVariantsFor.set(null);
+  const variant = game.variants.find((entry) => entry.id === variantId);
+  launchState.set(`Launching ${game.title}${variant ? ` — ${variant.label}` : ''}`);
+  errorMessage.set(null);
+
+  try {
+    const library = await launchRomVariant(game.id, variantId);
+    games.set(library.games);
+    selectedId.set(game.id);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    window.setTimeout(() => launchState.set(null), 900);
+  }
+}
+
+export async function scanForRoms() {
+  busyLabel.set('Scanning EmuDeck ROMs');
+  errorMessage.set(null);
+
+  try {
+    const folder = await selectFolder();
+    if (!folder) return;
+
+    const library = await scanEmudeckRoms(folder);
+    games.set(library.games);
+    selectedId.set(library.games[0]?.id ?? null);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
   }
 }
 

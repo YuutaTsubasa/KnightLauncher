@@ -2,7 +2,7 @@ use chrono::Utc;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     io::Write,
     net::IpAddr,
@@ -30,6 +30,16 @@ struct DisplayAssignment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GameVariant {
+    pub id: String,
+    pub label: String,
+    pub rom_path: String,
+    pub last_played_at: Option<String>,
+    pub play_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Game {
     pub id: String,
     pub title: String,
@@ -45,6 +55,10 @@ pub struct Game {
     pub description: Option<String>,
     pub platform: Option<String>,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub rom_system: Option<String>,
+    #[serde(default)]
+    pub variants: Vec<GameVariant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -59,6 +73,8 @@ pub struct AppSettings {
     pub steamgriddb_api_key: Option<String>,
     pub google_api_key: Option<String>,
     pub google_search_engine_id: Option<String>,
+    #[serde(default)]
+    pub emudeck_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -464,7 +480,161 @@ fn game_from_executable(path: PathBuf) -> Game {
         description: None,
         platform: Some("Windows".to_string()),
         tags: Vec::new(),
+        rom_system: None,
+        variants: Vec::new(),
     }
+}
+
+struct EmuSystem {
+    folder: &'static str,
+    platform_id: &'static str,
+    extensions: &'static [&'static str],
+}
+
+const EMU_SYSTEMS: &[EmuSystem] = &[
+    EmuSystem { folder: "snes", platform_id: "sfc", extensions: &["smc", "sfc", "fig"] },
+    EmuSystem { folder: "nes", platform_id: "fc", extensions: &["nes"] },
+    EmuSystem { folder: "n64", platform_id: "n64", extensions: &["n64", "z64", "v64"] },
+    EmuSystem { folder: "gb", platform_id: "gb", extensions: &["gb"] },
+    EmuSystem { folder: "gbc", platform_id: "gbc", extensions: &["gbc", "gb"] },
+    EmuSystem { folder: "gba", platform_id: "gba", extensions: &["gba"] },
+    EmuSystem { folder: "nds", platform_id: "ds", extensions: &["nds"] },
+    EmuSystem { folder: "n3ds", platform_id: "3ds", extensions: &["3ds", "cci", "cia", "app", "cxi"] },
+    EmuSystem { folder: "gc", platform_id: "gc", extensions: &["iso", "gcm", "ciso", "rvz", "wbfs"] },
+    EmuSystem { folder: "wii", platform_id: "wii", extensions: &["iso", "wbfs", "rvz", "wad"] },
+    EmuSystem { folder: "wiiu", platform_id: "wiiu", extensions: &["wud", "wux", "wua", "rpx"] },
+    EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"] },
+    EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"] },
+    EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"] },
+    EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"] },
+    EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"] },
+    EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"] },
+    EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"] },
+    EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"] },
+    EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"] },
+    EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"] },
+    EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"] },
+    EmuSystem { folder: "ngp", platform_id: "ngpc", extensions: &["ngp"] },
+    EmuSystem { folder: "ngpc", platform_id: "ngpc", extensions: &["ngc"] },
+    EmuSystem { folder: "android", platform_id: "android", extensions: &["apk"] },
+];
+
+fn find_emudeck_subdir(root: &Path, segments: &[&str]) -> Option<PathBuf> {
+    let direct = segments.iter().fold(root.to_path_buf(), |acc, seg| acc.join(seg));
+    if direct.is_dir() {
+        return Some(direct);
+    }
+    let nested = segments
+        .iter()
+        .fold(root.join("Emulation"), |acc, seg| acc.join(seg));
+    if nested.is_dir() {
+        return Some(nested);
+    }
+    None
+}
+
+fn locate_launcher(emudeck_root: &Path, system_folder: &str) -> Option<PathBuf> {
+    let dir = find_emudeck_subdir(emudeck_root, &["tools", "launchers"])?;
+    for ext in &["bat", "cmd", "ps1"] {
+        let candidate = dir.join(format!("{system_folder}.{ext}"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<(), String> {
+    let ext = launcher
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let mut command = match ext.as_str() {
+        "bat" | "cmd" => {
+            let mut c = Command::new("cmd");
+            c.arg("/c").arg(launcher).arg(rom_path);
+            c
+        }
+        "ps1" => {
+            let mut c = Command::new("powershell");
+            c.arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-File")
+                .arg(launcher)
+                .arg(rom_path);
+            c
+        }
+        other => return Err(format!("Unsupported launcher type: {other}")),
+    };
+    command
+        .spawn()
+        .map_err(|error| format!("Unable to launch ROM: {error}"))?;
+    Ok(())
+}
+
+fn classify_region_tag(tag: &str) -> Option<&'static str> {
+    match tag.to_lowercase().as_str() {
+        "japan" | "j" | "jp" | "jpn" => Some("Japan"),
+        "usa" | "u" | "us" => Some("USA"),
+        "europe" | "e" | "eu" | "eur" => Some("Europe"),
+        "world" | "w" => Some("World"),
+        "asia" => Some("Asia"),
+        "korea" | "kr" => Some("Korea"),
+        "china" | "cn" => Some("China"),
+        "germany" | "de" => Some("Germany"),
+        "france" | "fr" => Some("France"),
+        "italy" | "it" => Some("Italy"),
+        "spain" | "es" => Some("Spain"),
+        _ => None,
+    }
+}
+
+fn parse_rom_filename(stem: &str) -> (String, Option<String>) {
+    let mut clean = String::new();
+    let mut current_paren = String::new();
+    let mut paren_depth: i32 = 0;
+    let mut bracket_depth: i32 = 0;
+    let mut region: Option<String> = None;
+
+    for ch in stem.chars() {
+        match ch {
+            '(' => {
+                paren_depth += 1;
+                if paren_depth == 1 {
+                    current_paren.clear();
+                    continue;
+                }
+            }
+            ')' => {
+                paren_depth -= 1;
+                if paren_depth == 0 {
+                    if region.is_none() {
+                        region = classify_region_tag(current_paren.trim()).map(|s| s.to_string());
+                    }
+                    continue;
+                }
+            }
+            '[' => {
+                bracket_depth += 1;
+                continue;
+            }
+            ']' => {
+                bracket_depth -= 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        if paren_depth == 0 && bracket_depth == 0 {
+            clean.push(ch);
+        } else if paren_depth >= 1 {
+            current_paren.push(ch);
+        }
+    }
+
+    let clean: String = clean.split_whitespace().collect::<Vec<_>>().join(" ");
+    (clean, region)
 }
 
 fn sorted_monitor_layouts(app: &AppHandle) -> Result<Vec<MonitorLayout>, String> {
@@ -572,6 +742,7 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
         steamgriddb_api_key: normalize_optional_secret(settings.steamgriddb_api_key),
         google_api_key: normalize_optional_secret(settings.google_api_key),
         google_search_engine_id: normalize_optional_secret(settings.google_search_engine_id),
+        emudeck_root: normalize_optional_secret(settings.emudeck_root),
     };
     write_settings_to_disk(&app, &settings)?;
     Ok(settings)
@@ -698,6 +869,202 @@ fn launch_game(app: AppHandle, id: String) -> Result<Library, String> {
 
     game.last_played_at = Some(Utc::now().to_rfc3339());
     game.play_count = game.play_count.saturating_add(1);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
+    let root_path = PathBuf::from(root.trim());
+    if !root_path.is_dir() {
+        return Err(format!(
+            "EmuDeck root not found: {}",
+            root_path.display()
+        ));
+    }
+    let roms_dir = find_emudeck_subdir(&root_path, &["roms"])
+        .ok_or_else(|| format!("Could not find roms folder under {}", root_path.display()))?;
+
+    let mut settings = read_settings_from_disk(&app).unwrap_or_default();
+    settings.emudeck_root = Some(root_path.to_string_lossy().to_string());
+    write_settings_to_disk(&app, &settings)?;
+
+    let mut library = read_library_from_disk(&app)?;
+
+    for system in EMU_SYSTEMS {
+        let system_dir = roms_dir.join(system.folder);
+        if !system_dir.is_dir() {
+            continue;
+        }
+
+        let mut groups: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
+
+        for entry in WalkDir::new(&system_dir)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.path();
+            let extension = path
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if !system
+                .extensions
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(&extension))
+            {
+                continue;
+            }
+
+            let stem = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_string();
+            let (clean_title, region) = parse_rom_filename(&stem);
+            let label = region.unwrap_or_else(|| "Default".to_string());
+            let title_for_group = if clean_title.is_empty() {
+                stem.clone()
+            } else {
+                clean_title.clone()
+            };
+            let key = title_for_group.to_lowercase();
+
+            groups.entry(key).or_default().push((
+                path.to_string_lossy().to_string(),
+                label,
+                title_for_group,
+            ));
+        }
+
+        for (key, mut roms) in groups {
+            roms.sort_by(|a, b| a.1.cmp(&b.1));
+
+            let existing_idx = library.games.iter().position(|game| {
+                game.rom_system.as_deref() == Some(system.folder)
+                    && parse_rom_filename(&game.title).0.to_lowercase() == key
+            });
+
+            if let Some(idx) = existing_idx {
+                let existing_paths: HashSet<String> = library.games[idx]
+                    .variants
+                    .iter()
+                    .map(|variant| variant.rom_path.clone())
+                    .collect();
+                for (rom_path, label, _) in &roms {
+                    if !existing_paths.contains(rom_path) {
+                        library.games[idx].variants.push(GameVariant {
+                            id: Uuid::new_v4().to_string(),
+                            label: label.clone(),
+                            rom_path: rom_path.clone(),
+                            last_played_at: None,
+                            play_count: 0,
+                        });
+                    }
+                }
+            } else {
+                let title = roms
+                    .iter()
+                    .map(|(_, _, t)| t.clone())
+                    .find(|t| !t.is_empty())
+                    .unwrap_or_else(|| "Untitled".to_string());
+
+                let variants: Vec<GameVariant> = roms
+                    .iter()
+                    .map(|(rom_path, label, _)| GameVariant {
+                        id: Uuid::new_v4().to_string(),
+                        label: label.clone(),
+                        rom_path: rom_path.clone(),
+                        last_played_at: None,
+                        play_count: 0,
+                    })
+                    .collect();
+
+                library.games.push(Game {
+                    id: Uuid::new_v4().to_string(),
+                    title,
+                    executable_path: String::new(),
+                    launch_args: String::new(),
+                    working_directory: String::new(),
+                    cover_image: None,
+                    hero_image: None,
+                    logo_image: None,
+                    favorite: false,
+                    last_played_at: None,
+                    play_count: 0,
+                    description: None,
+                    platform: Some(system.platform_id.to_string()),
+                    tags: Vec::new(),
+                    rom_system: Some(system.folder.to_string()),
+                    variants,
+                });
+            }
+        }
+    }
+
+    library
+        .games
+        .sort_by_key(|game| game.title.to_lowercase());
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn launch_rom_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+) -> Result<Library, String> {
+    let settings = read_settings_from_disk(&app)?;
+    let emudeck_root = settings
+        .emudeck_root
+        .ok_or_else(|| "EmuDeck root not configured. Run Scan ROMs first.".to_string())?;
+    let emudeck_path = PathBuf::from(&emudeck_root);
+
+    let mut library = read_library_from_disk(&app)?;
+    let game_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let system = library.games[game_idx]
+        .rom_system
+        .clone()
+        .ok_or_else(|| "Game is not ROM-based.".to_string())?;
+    let variant_idx = library.games[game_idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+    let rom_path = PathBuf::from(&library.games[game_idx].variants[variant_idx].rom_path);
+    if !rom_path.exists() {
+        return Err(format!(
+            "ROM file no longer exists: {}",
+            rom_path.display()
+        ));
+    }
+
+    let launcher = locate_launcher(&emudeck_path, &system).ok_or_else(|| {
+        format!(
+            "EmuDeck launcher script for system '{system}' not found under {}",
+            emudeck_path.display()
+        )
+    })?;
+    spawn_launcher(&launcher, &rom_path)?;
+
+    let now = Utc::now().to_rfc3339();
+    {
+        let variant = &mut library.games[game_idx].variants[variant_idx];
+        variant.last_played_at = Some(now.clone());
+        variant.play_count = variant.play_count.saturating_add(1);
+    }
+    let game = &mut library.games[game_idx];
+    game.last_played_at = Some(now);
+    game.play_count = game.play_count.saturating_add(1);
+
     write_library_to_disk(&app, &library)?;
     Ok(library)
 }
@@ -939,7 +1306,9 @@ pub fn run() {
             select_image_path,
             select_folder,
             scan_folder,
+            scan_emudeck_roms,
             launch_game,
+            launch_rom_variant,
             detect_displays,
             steamgriddb_search_games,
             steamgriddb_game_artwork,

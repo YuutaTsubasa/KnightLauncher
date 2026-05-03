@@ -1,3 +1,11 @@
+export type GameVariant = {
+  id: string;
+  label: string;
+  romPath: string;
+  lastPlayedAt: string | null;
+  playCount: number;
+};
+
 export type Game = {
   id: string;
   title: string;
@@ -13,6 +21,8 @@ export type Game = {
   description: string | null;
   platform: string | null;
   tags: string[];
+  romSystem: string | null;
+  variants: GameVariant[];
 };
 
 export type GameLibrary = {
@@ -37,6 +47,7 @@ export type AppSettings = {
   steamgriddbApiKey: string | null;
   googleApiKey: string | null;
   googleSearchEngineId: string | null;
+  emudeckRoot: string | null;
 };
 
 export type SteamGridDbGame = {

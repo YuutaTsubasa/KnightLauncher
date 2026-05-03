@@ -4,6 +4,7 @@
     BadgePlus,
     FolderSearch,
     Gamepad2,
+    Joystick,
     Library,
     Pencil,
     Image,
@@ -31,6 +32,8 @@
     swapDisplays
   } from './lib/tauri';
   import type { Game, GoogleImageResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
+  import PlatformBadge from './lib/PlatformBadge.svelte';
+  import { PLATFORMS, frameGradient, resolvePlatform } from './lib/platforms';
   import {
     addExecutable,
     busyLabel,
@@ -41,11 +44,14 @@
     initializeLibrary,
     launchSelectedGame,
     launchState,
+    launchVariant,
     moveSelection,
+    pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
     saveGameEdits,
     scanForGames,
+    scanForRoms,
     selectedGame,
     selectedId,
     toggleFavorite
@@ -59,6 +65,11 @@
   let controllerName: string | null = null;
   let suppressSelectionBroadcast = false;
   let editingGame: Game | null = null;
+  let pickerIndex = 0;
+
+  $: if ($pickingVariantsFor) {
+    pickerIndex = 0;
+  }
   let artworkSource: 'steamgriddb' | 'google' = 'steamgriddb';
   let steamGridDbApiKey = '';
   let googleApiKey = '';
@@ -142,6 +153,32 @@
       if (editingGame && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         saveEditor();
+        return;
+      }
+
+      const picking = $pickingVariantsFor;
+      if (picking) {
+        if (event.key === 'Escape' || event.key.toLowerCase() === 'b') {
+          event.preventDefault();
+          pickingVariantsFor.set(null);
+          return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          pickerIndex = (pickerIndex + 1) % picking.variants.length;
+          return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+          event.preventDefault();
+          pickerIndex = (pickerIndex - 1 + picking.variants.length) % picking.variants.length;
+          return;
+        }
+        if (event.key === 'Enter' || event.key.toLowerCase() === 'a') {
+          event.preventDefault();
+          const variant = picking.variants[pickerIndex];
+          if (variant) launchVariant(picking, variant.id);
+          return;
+        }
         return;
       }
 
@@ -231,6 +268,21 @@
 
     if (editingGame) {
       if (action === 'back' || action === 'edit') closeEditor();
+      return;
+    }
+
+    const picking = $pickingVariantsFor;
+    if (picking) {
+      if (action === 'back') {
+        pickingVariantsFor.set(null);
+      } else if (action === 'launch') {
+        const variant = picking.variants[pickerIndex];
+        if (variant) launchVariant(picking, variant.id);
+      } else if (action === 'next') {
+        pickerIndex = (pickerIndex + 1) % picking.variants.length;
+      } else if (action === 'previous') {
+        pickerIndex = (pickerIndex - 1 + picking.variants.length) % picking.variants.length;
+      }
       return;
     }
 
@@ -360,6 +412,7 @@
     if (!game) return;
     editingGame = {
       ...game,
+      platform: resolvePlatform(game.platform).label,
       tags: [...game.tags]
     };
     artworkQuery = game.title;
@@ -421,7 +474,9 @@
     artworkBusy = 'Saving SteamGridDB key';
     artworkError = null;
     try {
+      const current = await loadSettings();
       const settings = await saveSettings({
+        ...current,
         steamgriddbApiKey: steamGridDbApiKey.trim() || null,
         googleApiKey: googleApiKey.trim() || null,
         googleSearchEngineId: googleSearchEngineId.trim() || null
@@ -492,7 +547,9 @@
     artworkBusy = 'Saving Google Search settings';
     artworkError = null;
     try {
+      const current = await loadSettings();
       const settings = await saveSettings({
+        ...current,
         steamgriddbApiKey: steamGridDbApiKey.trim() || null,
         googleApiKey: googleApiKey.trim() || null,
         googleSearchEngineId: googleSearchEngineId.trim() || null
@@ -563,7 +620,7 @@
   function heroStyle(game: Game | null) {
     const url = imageUrl(game?.heroImage ?? null);
     if (!url) return '';
-    return `background-image: linear-gradient(90deg, rgba(9, 12, 17, 0.92), rgba(9, 12, 17, 0.44)), url("${url}")`;
+    return `background-image: url("${url}")`;
   }
 
   function artworkList(results: SteamGridDbArtwork | null, kind: 'covers' | 'heroes' | 'logos' | 'icons') {
@@ -572,7 +629,7 @@
 </script>
 
 <main class:dual={$hasDualDisplay} class:detail-only={windowRole === 'detail'} class:library-only={windowRole === 'library'}>
-  <section class="top-display" style={heroStyle($selectedGame)}>
+  <section class="top-display" class:has-hero={!!$selectedGame?.heroImage} style={heroStyle($selectedGame)}>
     <div class="status-bar">
       <div class="brand">
         <Gamepad2 size={22} />
@@ -631,6 +688,9 @@
           <button title="Scan folder" on:click={scanForGames}>
             <FolderSearch size={18} />
           </button>
+          <button title="Scan EmuDeck ROMs" on:click={scanForRoms}>
+            <Joystick size={18} />
+          </button>
           <button title="Edit selected game" on:click={openEditor} disabled={!$selectedGame}>
             <Pencil size={18} />
           </button>
@@ -668,26 +728,29 @@
       {#if $filteredGames.length}
         <div class="game-grid" aria-label="Games">
           {#each $filteredGames as game}
+            {@const platform = resolvePlatform(game.platform)}
             <button
               class="game-card"
               class:selected={$selectedId === game.id}
+              title={game.title}
+              aria-label={game.title}
               on:click={() => selectedId.set(game.id)}
               on:dblclick={launchSelectedGame}
             >
-              <div class="cover">
-                {#if game.coverImage}
-                  <img src={imageUrl(game.coverImage)} alt="" />
-                {:else}
-                  <span>{initials(game.title)}</span>
-                {/if}
-                {#if game.favorite}
-                  <Star size={16} fill="currentColor" />
-                {/if}
-              </div>
-
-              <div class="game-meta">
-                <strong>{game.title}</strong>
-                <span>{game.platform ?? 'Windows'}</span>
+              <div class="platform-frame" style="background: {frameGradient(platform)};">
+                <div class="cover">
+                  {#if game.coverImage}
+                    <img src={imageUrl(game.coverImage)} alt="" />
+                  {:else}
+                    <span>{initials(game.title)}</span>
+                  {/if}
+                  {#if game.favorite}
+                    <Star size={16} fill="currentColor" />
+                  {/if}
+                </div>
+                <span class="badge-corner">
+                  <PlatformBadge {platform} />
+                </span>
               </div>
             </button>
           {/each}
@@ -700,6 +763,38 @@
         </div>
       {/if}
     </div>
+
+    {#if $pickingVariantsFor}
+      {@const picking = $pickingVariantsFor}
+      <div class="variant-picker" role="dialog" aria-label="Choose version">
+        <div class="variant-picker-header">
+          <div>
+            <p>Choose version</p>
+            <h3>{picking.title}</h3>
+          </div>
+          <button class="icon-action" title="Close" on:click={() => pickingVariantsFor.set(null)}>X</button>
+        </div>
+        <div class="variant-list">
+          {#each picking.variants as variant, idx}
+            <button
+              type="button"
+              class="variant-row"
+              class:selected={pickerIndex === idx}
+              on:click={() => launchVariant(picking, variant.id)}
+              on:mouseenter={() => (pickerIndex = idx)}
+            >
+              <strong>{variant.label}</strong>
+              <span class="meta">
+                {variant.playCount} plays
+                {#if variant.lastPlayedAt}
+                  · last {new Date(variant.lastPlayedAt).toLocaleDateString()}
+                {/if}
+              </span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     {#if editingGame}
       <div class="edit-panel" role="dialog" aria-label="Edit game">
@@ -719,13 +814,32 @@
 
           <label>
             <span>Platform</span>
-            <input bind:value={editingGame.platform} placeholder="Windows" />
+            <select bind:value={editingGame.platform}>
+              {#each PLATFORMS as platformOption}
+                <option value={platformOption.label}>{platformOption.label}</option>
+              {/each}
+            </select>
           </label>
 
           <label class="wide">
             <span>Description</span>
             <textarea bind:value={editingGame.description} rows="3"></textarea>
           </label>
+
+          {#if editingGame.variants.length > 0}
+            <div class="wide variant-section">
+              <span>ROM Variants</span>
+              <div class="variant-rows">
+                {#each editingGame.variants as variant}
+                  <div class="variant-edit-row">
+                    <strong>{variant.label}</strong>
+                    <small class="path" title={variant.romPath}>{variant.romPath}</small>
+                    <small>{variant.playCount} plays{variant.lastPlayedAt ? ` · last ${new Date(variant.lastPlayedAt).toLocaleDateString()}` : ''}</small>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
 
           <label class="wide">
             <span>Executable</span>
