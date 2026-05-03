@@ -5,6 +5,7 @@ import {
   launchGame,
   launchRomVariant,
   loadLibrary,
+  mergeGames,
   notifyLibraryChanged,
   removeGame,
   retroAchievementsLinkGame,
@@ -15,6 +16,9 @@ import {
   scanFolder,
   selectExecutable,
   selectFolder,
+  setGameHidden,
+  splitVariant,
+  swapGamePositions,
   upsertGame
 } from './tauri';
 
@@ -29,6 +33,7 @@ export const errorMessage = writable<string | null>(null);
 export const launchState = writable<string | null>(null);
 export const pickingVariantsFor = writable<Game | null>(null);
 export const showingAchievementsFor = writable<Game | null>(null);
+export const reorderMode = writable(false);
 
 export const selectedGame = derived([games, selectedId], ([$games, $selectedId]) => {
   return $games.find((game) => game.id === $selectedId) ?? $games[0] ?? null;
@@ -40,8 +45,13 @@ export const filteredGames = derived(
     const normalizedQuery = $query.trim().toLowerCase();
 
     let result = $games.filter((game) => {
-      if ($filter === 'favorites' && !game.favorite) return false;
-      if ($filter === 'recent' && !game.lastPlayedAt) return false;
+      if ($filter === 'hidden') {
+        if (!game.hidden) return false;
+      } else {
+        if (game.hidden) return false;
+        if ($filter === 'favorites' && !game.favorite) return false;
+        if ($filter === 'recent' && !game.lastPlayedAt) return false;
+      }
       if (!normalizedQuery) return true;
 
       return [game.title, game.platform, ...(game.tags ?? [])]
@@ -52,6 +62,10 @@ export const filteredGames = derived(
     });
 
     result = [...result].sort((left, right) => {
+      if ($sortMode === 'manual') {
+        const diff = (left.position || 0) - (right.position || 0);
+        return diff !== 0 ? diff : left.title.localeCompare(right.title);
+      }
       if ($sortMode === 'recent') {
         return Date.parse(right.lastPlayedAt ?? '0') - Date.parse(left.lastPlayedAt ?? '0');
       }
@@ -296,4 +310,63 @@ export function moveSelection(direction: 1 | -1) {
   const currentIndex = Math.max(0, list.findIndex((game) => game.id === currentId));
   const nextIndex = (currentIndex + direction + list.length) % list.length;
   selectedId.set(list[nextIndex].id);
+}
+
+export async function swapSelectedWith(targetId: string) {
+  const currentId = get(selectedId);
+  if (!currentId || currentId === targetId) return;
+  if (get(sortMode) !== 'manual') {
+    sortMode.set('manual');
+  }
+  try {
+    const library = await swapGamePositions(currentId, targetId);
+    games.set(library.games);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function toggleHiddenForSelected() {
+  const id = get(selectedId);
+  if (!id) return;
+  const game = get(games).find((entry) => entry.id === id);
+  if (!game) return;
+
+  try {
+    const library = await setGameHidden(id, !game.hidden);
+    games.set(library.games);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function mergeIntoTarget(sourceId: string, targetId: string) {
+  busyLabel.set('Merging games');
+  errorMessage.set(null);
+  try {
+    const library = await mergeGames(sourceId, targetId);
+    games.set(library.games);
+    selectedId.set(targetId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function splitVariantInto(gameId: string, variantId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await splitVariant(gameId, variantId);
+    games.set(library.games);
+    notifyLibraryChanged().catch(() => {});
+    return library;
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  }
 }

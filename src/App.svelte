@@ -1,16 +1,23 @@
 <script lang="ts">
   import {
     Activity,
+    ArrowDownAZ,
     BadgePlus,
+    Eye,
+    EyeOff,
+    Filter,
     FolderSearch,
     Gamepad2,
     Joystick,
     Library,
+    Move,
     Pencil,
     Image,
     Monitor,
     Play,
     RefreshCw,
+    Scissors,
+    Split,
     Star,
     Trophy,
     Unlink
@@ -42,30 +49,48 @@
     busyLabel,
     displays,
     errorMessage,
+    filter,
     filteredGames,
+    games,
     hasDualDisplay,
     initializeLibrary,
     launchSelectedGame,
     launchState,
     launchVariant,
     linkRetroAchievements,
+    mergeIntoTarget,
     moveSelection,
     pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
     refreshRetroAchievements,
+    reorderMode,
     saveGameEdits,
     scanForGames,
     scanForRoms,
     selectedGame,
     selectedId,
     showingAchievementsFor,
+    sortMode,
+    splitVariantInto,
+    swapSelectedWith,
     toggleFavorite,
+    toggleHiddenForSelected,
     unlinkRetroAchievements
   } from './lib/libraryStore';
+  import type { LibraryFilter, SortMode } from './lib/types';
 
   type WindowRole = 'single' | 'detail' | 'library';
-  type ControllerAction = 'next' | 'previous' | 'launch' | 'back' | 'swap' | 'achievements' | 'edit';
+  type ControllerAction =
+    | 'right'
+    | 'left'
+    | 'up'
+    | 'down'
+    | 'launch'
+    | 'back'
+    | 'swap'
+    | 'achievements'
+    | 'edit';
 
   let windowRole: WindowRole = 'single';
   let displayMessage: string | null = null;
@@ -73,6 +98,104 @@
   let suppressSelectionBroadcast = false;
   let editingGame: Game | null = null;
   let pickerIndex = 0;
+  let mergePickerOpen = false;
+  let mergePickerQuery = '';
+
+  const FILTER_ORDER: LibraryFilter[] = ['all', 'favorites', 'recent', 'hidden'];
+  const SORT_ORDER: SortMode[] = ['title', 'recent', 'playCount', 'manual'];
+
+  const filterLabel: Record<LibraryFilter, string> = {
+    all: 'All',
+    favorites: 'Favorites',
+    recent: 'Recent',
+    hidden: 'Hidden'
+  };
+
+  const sortLabel: Record<SortMode, string> = {
+    title: 'A → Z',
+    recent: 'Recently played',
+    playCount: 'Most played',
+    manual: 'Manual order'
+  };
+
+  function cycleFilter() {
+    const current = $filter;
+    const next = FILTER_ORDER[(FILTER_ORDER.indexOf(current) + 1) % FILTER_ORDER.length];
+    filter.set(next);
+  }
+
+  function cycleSort() {
+    const current = $sortMode;
+    const next = SORT_ORDER[(SORT_ORDER.indexOf(current) + 1) % SORT_ORDER.length];
+    sortMode.set(next);
+  }
+
+  type ArrowDirection = 'up' | 'down' | 'left' | 'right';
+
+  function findSpatialTarget(direction: ArrowDirection): string | null {
+    const list = $filteredGames;
+    if (list.length < 2) return null;
+
+    const currentId = $selectedId;
+    if (!currentId) return list[0]?.id ?? null;
+
+    const cards = document.querySelectorAll<HTMLElement>('.game-card');
+    if (!cards.length || cards.length !== list.length) return null;
+
+    const index = list.findIndex((game) => game.id === currentId);
+    if (index < 0) return list[0].id;
+
+    const currentTop = cards[index].offsetTop;
+    const currentLeft = cards[index].offsetLeft;
+
+    if (direction === 'left') {
+      return index > 0 ? list[index - 1].id : null;
+    }
+    if (direction === 'right') {
+      return index < list.length - 1 ? list[index + 1].id : null;
+    }
+
+    const offsets = Array.from(cards, (card) => ({ top: card.offsetTop, left: card.offsetLeft }));
+
+    const targetRowTop = direction === 'down'
+      ? offsets.map((offset) => offset.top).find((top) => top > currentTop)
+      : offsets
+          .map((offset) => offset.top)
+          .filter((top) => top < currentTop)
+          .reduce<number | null>((best, top) => (best === null || top > best ? top : best), null);
+
+    if (targetRowTop === undefined || targetRowTop === null) return null;
+
+    let bestIdx = -1;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    offsets.forEach((offset, idx) => {
+      if (offset.top !== targetRowTop) return;
+      const delta = Math.abs(offset.left - currentLeft);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestIdx = idx;
+      }
+    });
+
+    return bestIdx >= 0 ? list[bestIdx].id : null;
+  }
+
+  function handleArrowDirection(direction: ArrowDirection) {
+    if ($reorderMode) {
+      const targetId = findSpatialTarget(direction);
+      if (targetId) {
+        swapSelectedWith(targetId);
+      }
+      return;
+    }
+
+    const targetId = findSpatialTarget(direction);
+    if (targetId) {
+      selectedId.set(targetId);
+    } else {
+      moveSelection(direction === 'right' || direction === 'down' ? 1 : -1);
+    }
+  }
 
   $: if ($pickingVariantsFor) {
     pickerIndex = 0;
@@ -219,20 +342,32 @@
       if (event.target instanceof HTMLInputElement) return;
       if (event.target instanceof HTMLTextAreaElement) return;
 
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      if (event.key === 'ArrowRight') {
         event.preventDefault();
-        moveSelection(1);
+        handleArrowDirection('right');
       }
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      if (event.key === 'ArrowLeft') {
         event.preventDefault();
-        moveSelection(-1);
+        handleArrowDirection('left');
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        handleArrowDirection('down');
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        handleArrowDirection('up');
       }
       if (event.key === 'Enter' || event.key.toLowerCase() === 'a') {
         event.preventDefault();
         launchSelectedGame();
       }
       if (event.key === 'Escape' || event.key.toLowerCase() === 'b') {
-        query.set('');
+        if ($reorderMode) {
+          reorderMode.set(false);
+        } else {
+          query.set('');
+        }
       }
       if (event.key.toLowerCase() === 'x') {
         event.preventDefault();
@@ -317,6 +452,11 @@
       return;
     }
 
+    if ($reorderMode && action === 'back') {
+      reorderMode.set(false);
+      return;
+    }
+
     const picking = $pickingVariantsFor;
     if (picking) {
       if (action === 'back') {
@@ -324,9 +464,9 @@
       } else if (action === 'launch') {
         const variant = picking.variants[pickerIndex];
         if (variant) launchVariant(picking, variant.id);
-      } else if (action === 'next') {
+      } else if (action === 'right' || action === 'down') {
         pickerIndex = (pickerIndex + 1) % picking.variants.length;
-      } else if (action === 'previous') {
+      } else if (action === 'left' || action === 'up') {
         pickerIndex = (pickerIndex - 1 + picking.variants.length) % picking.variants.length;
       }
       return;
@@ -346,13 +486,8 @@
       return;
     }
 
-    if (action === 'next') {
-      moveSelection(1);
-      return;
-    }
-
-    if (action === 'previous') {
-      moveSelection(-1);
+    if (action === 'right' || action === 'left' || action === 'up' || action === 'down') {
+      handleArrowDirection(action);
       return;
     }
 
@@ -435,8 +570,10 @@
         emitOnce('x', pressed.x, 'swap');
         emitOnce('y', pressed.y, 'achievements');
         emitOnce('menu', pressed.menu, 'edit');
-        emitRepeated('right', pressed.right || pressed.down || pressed.rb, 'next', now);
-        emitRepeated('left', pressed.left || pressed.up || pressed.lb, 'previous', now);
+        emitRepeated('right', pressed.right || pressed.rb, 'right', now);
+        emitRepeated('left', pressed.left || pressed.lb, 'left', now);
+        emitRepeated('down', pressed.down, 'down', now);
+        emitRepeated('up', pressed.up, 'up', now);
       }
 
       previousPressed = nextPressed;
@@ -557,6 +694,42 @@
     }
   }
 
+  $: filteredMergeCandidates = editingGame
+    ? $games
+        .filter(
+          (candidate) =>
+            candidate.id !== editingGame!.id &&
+            candidate.variants.length > 0 &&
+            (resolvePlatform(candidate.platform).id === resolvePlatform(editingGame!.platform).id) &&
+            candidate.title.toLowerCase().includes(mergePickerQuery.toLowerCase().trim())
+        )
+        .slice(0, 20)
+    : [];
+
+  async function mergeCandidate(candidate: Game) {
+    if (!editingGame) return;
+    try {
+      await mergeIntoTarget(candidate.id, editingGame.id);
+      const refreshed = $games.find((entry) => entry.id === editingGame!.id);
+      if (refreshed) {
+        editingGame = { ...refreshed, tags: [...refreshed.tags] };
+      }
+      mergePickerOpen = false;
+      mergePickerQuery = '';
+    } catch {}
+  }
+
+  async function splitVariantFromEditor(variantId: string) {
+    if (!editingGame) return;
+    try {
+      const library = await splitVariantInto(editingGame.id, variantId);
+      const refreshed = library.games.find((entry) => entry.id === editingGame!.id);
+      if (refreshed) {
+        editingGame = { ...refreshed, tags: [...refreshed.tags] };
+      }
+    } catch {}
+  }
+
   function openEditor() {
     if (windowRole === 'detail') return;
     const game = get(selectedGame);
@@ -566,6 +739,8 @@
       platform: resolvePlatform(game.platform).label,
       tags: [...game.tags]
     };
+    mergePickerOpen = false;
+    mergePickerQuery = '';
     artworkQuery = game.title;
     artworkGames = [];
     selectedArtworkGame = null;
@@ -830,9 +1005,19 @@
   <section class="bottom-display">
     <div class="library-panel">
       <header class="library-header">
-        <div>
+        <div class="library-title">
           <h2>Game Library</h2>
-          <p>{$filteredGames.length} games</p>
+          <div class="library-meta">
+            <p>{$filteredGames.length} games</p>
+            <button class="chip" title="Filter" on:click={cycleFilter}>
+              <Filter size={13} />
+              {filterLabel[$filter]}
+            </button>
+            <button class="chip" title="Sort order" on:click={cycleSort}>
+              <ArrowDownAZ size={13} />
+              {sortLabel[$sortMode]}
+            </button>
+          </div>
         </div>
 
         <div class="clean-actions">
@@ -844,6 +1029,24 @@
           </button>
           <button title="Scan EmuDeck ROMs" on:click={scanForRoms}>
             <Joystick size={18} />
+          </button>
+          <button
+            title={$selectedGame?.hidden ? 'Unhide selected' : 'Hide selected'}
+            on:click={toggleHiddenForSelected}
+            disabled={!$selectedGame}
+          >
+            {#if $selectedGame?.hidden}
+              <Eye size={18} />
+            {:else}
+              <EyeOff size={18} />
+            {/if}
+          </button>
+          <button
+            title="Reorder mode"
+            class:active={$reorderMode}
+            on:click={() => reorderMode.update((value) => !value)}
+          >
+            <Move size={18} />
           </button>
           <button title="Edit selected game" on:click={openEditor} disabled={!$selectedGame}>
             <Pencil size={18} />
@@ -858,6 +1061,13 @@
           </button>
         </div>
       </header>
+
+      {#if $reorderMode}
+        <div class="notice launch">
+          <Move size={16} />
+          Reorder mode · Arrows / D-pad swap with neighbour · B / Esc to exit
+        </div>
+      {/if}
 
       {#if $busyLabel}
         <div class="notice busy">
@@ -891,6 +1101,8 @@
             <button
               class="game-card"
               class:selected={$selectedId === game.id}
+              class:reordering={$reorderMode && $selectedId === game.id}
+              class:hidden-card={game.hidden}
               title={game.title}
               aria-label={game.title}
               on:click={() => selectedId.set(game.id)}
@@ -1023,12 +1235,73 @@
               <div class="variant-rows">
                 {#each editingGame.variants as variant}
                   <div class="variant-edit-row">
-                    <strong>{variant.label}</strong>
-                    <small class="path" title={variant.romPath}>{variant.romPath}</small>
-                    <small>{variant.playCount} plays{variant.lastPlayedAt ? ` · last ${new Date(variant.lastPlayedAt).toLocaleDateString()}` : ''}</small>
+                    <div class="variant-edit-info">
+                      <strong>{variant.label}</strong>
+                      <small class="path" title={variant.romPath}>{variant.romPath}</small>
+                      <small>{variant.playCount} plays{variant.lastPlayedAt ? ` · last ${new Date(variant.lastPlayedAt).toLocaleDateString()}` : ''}</small>
+                    </div>
+                    {#if editingGame.variants.length > 1}
+                      <button type="button" title="Split into separate game" on:click={() => splitVariantFromEditor(variant.id)}>
+                        <Split size={14} />
+                        Split
+                      </button>
+                    {/if}
                   </div>
                 {/each}
               </div>
+            </div>
+          {/if}
+
+          {#if editingGame.variants.length > 0 || editingGame.romSystem}
+            <div class="wide merge-section">
+              <div class="ra-heading">
+                <span>Combine games</span>
+                <strong>Merge another game's variants into this one</strong>
+              </div>
+              {#if !mergePickerOpen}
+                <div class="path-row">
+                  <button type="button" on:click={() => (mergePickerOpen = true)}>
+                    <Scissors size={14} />
+                    Merge from another game
+                  </button>
+                </div>
+              {:else}
+                <div class="path-row">
+                  <input
+                    type="text"
+                    bind:value={mergePickerQuery}
+                    placeholder="Search by title"
+                    autocomplete="off"
+                  />
+                  <button
+                    type="button"
+                    on:click={() => {
+                      mergePickerOpen = false;
+                      mergePickerQuery = '';
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {#if filteredMergeCandidates.length}
+                  <div class="ra-results">
+                    {#each filteredMergeCandidates as candidate}
+                      <button
+                        type="button"
+                        class="ra-result-row"
+                        on:click={() => mergeCandidate(candidate)}
+                      >
+                        <div class="ra-result-meta">
+                          <strong>{candidate.title}</strong>
+                          <small>{candidate.variants.length} variant{candidate.variants.length === 1 ? '' : 's'} · {candidate.playCount} plays</small>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <small class="merge-hint">No other games on this platform have variants.</small>
+                {/if}
+              {/if}
             </div>
           {/if}
 

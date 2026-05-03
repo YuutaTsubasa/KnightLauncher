@@ -186,6 +186,26 @@ export async function retroAchievementsUnlink(gameId: string): Promise<GameLibra
   return invoke<GameLibrary>('retroachievements_unlink', { gameId });
 }
 
+export async function swapGamePositions(gameIdA: string, gameIdB: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('swap_game_positions', { gameIdA, gameIdB });
+}
+
+export async function setGameHidden(gameId: string, hidden: boolean): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('set_game_hidden', { gameId, hidden });
+}
+
+export async function mergeGames(sourceId: string, targetId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('merge_games', { sourceId, targetId });
+}
+
+export async function splitVariant(gameId: string, variantId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('split_variant', { gameId, variantId });
+}
+
 const demoGames: Game[] = [
   {
     id: 'demo-elden-ring',
@@ -204,7 +224,9 @@ const demoGames: Game[] = [
     tags: ['Action RPG', 'Favorite'],
     romSystem: null,
     variants: [],
-    retroAchievements: null
+    retroAchievements: null,
+    position: 0,
+    hidden: false
   },
   {
     id: 'demo-hades',
@@ -223,7 +245,9 @@ const demoGames: Game[] = [
     tags: ['Roguelite'],
     romSystem: null,
     variants: [],
-    retroAchievements: null
+    retroAchievements: null,
+    position: 0,
+    hidden: false
   },
   {
     id: 'demo-cyberpunk',
@@ -242,6 +266,8 @@ const demoGames: Game[] = [
     tags: ['RPG'],
     romSystem: null,
     variants: [],
-    retroAchievements: null
+    retroAchievements: null,
+    position: 0,
+    hidden: false
   }
 ];

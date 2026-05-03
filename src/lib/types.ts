@@ -61,6 +61,8 @@ export type Game = {
   romSystem: string | null;
   variants: GameVariant[];
   retroAchievements: RetroAchievementsLink | null;
+  position: number;
+  hidden: boolean;
 };
 
 export type GameLibrary = {
@@ -77,9 +79,9 @@ export type DisplayInfo = {
   scaleFactor: number;
 };
 
-export type LibraryFilter = 'all' | 'favorites' | 'recent';
+export type LibraryFilter = 'all' | 'favorites' | 'recent' | 'hidden';
 
-export type SortMode = 'title' | 'recent' | 'playCount';
+export type SortMode = 'title' | 'recent' | 'playCount' | 'manual';
 
 export type AppSettings = {
   steamgriddbApiKey: string | null;

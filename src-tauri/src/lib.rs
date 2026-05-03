@@ -92,6 +92,10 @@ pub struct Game {
     pub variants: Vec<GameVariant>,
     #[serde(default)]
     pub retro_achievements: Option<RetroAchievementsLink>,
+    #[serde(default)]
+    pub position: u32,
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -520,6 +524,8 @@ fn game_from_executable(path: PathBuf) -> Game {
         rom_system: None,
         variants: Vec::new(),
         retro_achievements: None,
+        position: 0,
+        hidden: false,
     }
 }
 
@@ -1204,6 +1210,192 @@ fn remove_game(app: AppHandle, id: String) -> Result<Library, String> {
     Ok(library)
 }
 
+fn normalize_positions(library: &mut Library) {
+    if !library.games.iter().all(|game| game.position == 0) {
+        return;
+    }
+    let mut sorted_ids: Vec<(String, String)> = library
+        .games
+        .iter()
+        .map(|game| (game.id.clone(), game.title.to_lowercase()))
+        .collect();
+    sorted_ids.sort_by(|a, b| a.1.cmp(&b.1));
+    for (index, (id, _)) in sorted_ids.iter().enumerate() {
+        if let Some(game) = library.games.iter_mut().find(|game| &game.id == id) {
+            game.position = (index as u32) + 1;
+        }
+    }
+}
+
+fn next_position(library: &Library) -> u32 {
+    library
+        .games
+        .iter()
+        .map(|game| game.position)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
+}
+
+#[tauri::command]
+fn swap_game_positions(
+    app: AppHandle,
+    game_id_a: String,
+    game_id_b: String,
+) -> Result<Library, String> {
+    if game_id_a == game_id_b {
+        return read_library_from_disk(&app);
+    }
+    let mut library = read_library_from_disk(&app)?;
+    normalize_positions(&mut library);
+
+    let pos_a = library
+        .games
+        .iter()
+        .find(|game| game.id == game_id_a)
+        .map(|game| game.position)
+        .ok_or_else(|| "First game not found.".to_string())?;
+    let pos_b = library
+        .games
+        .iter()
+        .find(|game| game.id == game_id_b)
+        .map(|game| game.position)
+        .ok_or_else(|| "Second game not found.".to_string())?;
+
+    for game in library.games.iter_mut() {
+        if game.id == game_id_a {
+            game.position = pos_b;
+        } else if game.id == game_id_b {
+            game.position = pos_a;
+        }
+    }
+
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn set_game_hidden(app: AppHandle, game_id: String, hidden: bool) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    library.games[idx].hidden = hidden;
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn merge_games(
+    app: AppHandle,
+    source_id: String,
+    target_id: String,
+) -> Result<Library, String> {
+    if source_id == target_id {
+        return Err("Cannot merge a game into itself.".to_string());
+    }
+    let mut library = read_library_from_disk(&app)?;
+
+    let source_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == source_id)
+        .ok_or_else(|| "Source game not found.".to_string())?;
+    let source = library.games.remove(source_idx);
+
+    if source.variants.is_empty() {
+        // Restore source so caller sees consistent state
+        library.games.push(source);
+        return Err("Source game has no ROM variants to merge.".to_string());
+    }
+
+    let target_idx = library
+        .games
+        .iter()
+        .position(|game| game.id == target_id)
+        .ok_or_else(|| "Target game not found.".to_string())?;
+
+    let target = &mut library.games[target_idx];
+    let existing_paths: HashSet<String> = target
+        .variants
+        .iter()
+        .map(|variant| variant.rom_path.clone())
+        .collect();
+    for variant in source.variants {
+        if !existing_paths.contains(&variant.rom_path) {
+            target.variants.push(variant);
+        }
+    }
+    target.play_count = target.play_count.saturating_add(source.play_count);
+    if let Some(source_played) = source.last_played_at.as_ref() {
+        match &target.last_played_at {
+            None => target.last_played_at = Some(source_played.clone()),
+            Some(current) if source_played > current => {
+                target.last_played_at = Some(source_played.clone())
+            }
+            _ => {}
+        }
+    }
+
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn split_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: String,
+) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+
+    let idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    if library.games[idx].variants.len() <= 1 {
+        return Err("Game has only one variant; nothing to split.".to_string());
+    }
+    let variant_pos = library.games[idx]
+        .variants
+        .iter()
+        .position(|variant| variant.id == variant_id)
+        .ok_or_else(|| "Variant not found.".to_string())?;
+
+    let variant = library.games[idx].variants.remove(variant_pos);
+    let position = next_position(&library);
+    let source = &library.games[idx];
+
+    let new_game = Game {
+        id: Uuid::new_v4().to_string(),
+        title: format!("{} ({})", source.title, variant.label),
+        executable_path: String::new(),
+        launch_args: String::new(),
+        working_directory: String::new(),
+        cover_image: source.cover_image.clone(),
+        hero_image: source.hero_image.clone(),
+        logo_image: source.logo_image.clone(),
+        favorite: false,
+        last_played_at: variant.last_played_at.clone(),
+        play_count: variant.play_count,
+        description: source.description.clone(),
+        platform: source.platform.clone(),
+        tags: source.tags.clone(),
+        rom_system: source.rom_system.clone(),
+        variants: vec![variant],
+        retro_achievements: None,
+        position,
+        hidden: false,
+    };
+    library.games.push(new_game);
+
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
 #[tauri::command]
 fn select_executable() -> Result<Option<Game>, String> {
     let Some(path) = rfd::FileDialog::new()
@@ -1431,6 +1623,8 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                     rom_system: Some(system.folder.to_string()),
                     variants,
                     retro_achievements: None,
+                    position: 0,
+                    hidden: false,
                 });
             }
         }
@@ -1748,6 +1942,10 @@ pub fn run() {
             retroachievements_link_game,
             retroachievements_refresh,
             retroachievements_unlink,
+            swap_game_positions,
+            set_game_hidden,
+            merge_games,
+            split_variant,
             detect_displays,
             steamgriddb_search_games,
             steamgriddb_game_artwork,
