@@ -7,7 +7,7 @@ use std::{
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, Command},
     sync::Mutex,
     time::Duration,
 };
@@ -507,6 +507,7 @@ const EMU_SYSTEMS: &[EmuSystem] = &[
     EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"], launchers: &["Ryujinx"] },
     EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
     EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
+    EmuSystem { folder: "sega32x", platform_id: "32x", extensions: &["32x", "md", "smd", "bin"], launchers: &["retroarch"] },
     EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"] },
     EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"] },
     EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"] },
@@ -555,7 +556,7 @@ fn lookup_emu_system(folder: &str) -> Option<&'static EmuSystem> {
     EMU_SYSTEMS.iter().find(|system| system.folder == folder)
 }
 
-fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<(), String> {
+fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<Child, String> {
     let ext = launcher
         .extension()
         .and_then(|value| value.to_str())
@@ -580,8 +581,28 @@ fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<(), String> {
     };
     command
         .spawn()
-        .map_err(|error| format!("Unable to launch ROM: {error}"))?;
-    Ok(())
+        .map_err(|error| format!("Unable to launch ROM: {error}"))
+}
+
+fn handoff_focus_to_child(app: &AppHandle, mut child: Child) {
+    if let Some(window) = app.get_webview_window(LIBRARY_WINDOW) {
+        let _ = window.minimize();
+    }
+    if let Some(window) = app.get_webview_window(DETAIL_WINDOW) {
+        let _ = window.minimize();
+    }
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        if let Some(window) = handle.get_webview_window(LIBRARY_WINDOW) {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+        if let Some(window) = handle.get_webview_window(DETAIL_WINDOW) {
+            let _ = window.unminimize();
+        }
+    });
 }
 
 fn classify_single_region(tag: &str) -> Option<&'static str> {
@@ -898,9 +919,10 @@ fn launch_game(app: AppHandle, id: String) -> Result<Library, String> {
         command.arg(arg);
     }
 
-    command
+    let child = command
         .spawn()
         .map_err(|error| format!("Unable to launch {}: {error}", game.title))?;
+    handoff_focus_to_child(&app, child);
 
     game.last_played_at = Some(Utc::now().to_rfc3339());
     game.play_count = game.play_count.saturating_add(1);
@@ -1091,7 +1113,8 @@ fn launch_rom_variant(
             emudeck_path.display()
         )
     })?;
-    spawn_launcher(&launcher, &rom_path)?;
+    let child = spawn_launcher(&launcher, &rom_path)?;
+    handoff_focus_to_child(&app, child);
 
     let now = Utc::now().to_rfc3339();
     {

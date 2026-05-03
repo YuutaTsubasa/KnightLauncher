@@ -61,8 +61,8 @@ main.library-only .bottom-display {
 }
 
 main.library-only .game-grid {
-  grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
-  gap: 28px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 32px 28px;
 }
 
 main.detail-only h1 {
@@ -346,8 +346,8 @@ h1 {
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 22px 20px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 26px 22px;
   min-height: 0;
   overflow: auto;
   padding: 4px 2px 18px;
@@ -895,7 +895,7 @@ h1 {
   }
 
   .game-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
     overflow: visible;
   }
 }
