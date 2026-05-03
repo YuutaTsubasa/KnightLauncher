@@ -63,6 +63,14 @@ pub struct RetroAchievementsLink {
     pub console_id: u32,
     pub console_name: String,
     pub icon_path: Option<String>,
+    #[serde(default)]
+    pub icon_url: Option<String>,
+    #[serde(default)]
+    pub box_art_url: Option<String>,
+    #[serde(default)]
+    pub title_url: Option<String>,
+    #[serde(default)]
+    pub ingame_url: Option<String>,
     pub achievements_total: u32,
     pub achievements_earned: u32,
     pub points_total: u32,
@@ -832,6 +840,12 @@ struct RaGameInfoResponse {
     console_name: String,
     #[serde(rename = "ImageIcon", default)]
     image_icon: Option<String>,
+    #[serde(rename = "ImageTitle", default)]
+    image_title: Option<String>,
+    #[serde(rename = "ImageIngame", default, alias = "ImageInGame")]
+    image_ingame: Option<String>,
+    #[serde(rename = "ImageBoxArt", default)]
+    image_box_art: Option<String>,
     #[serde(rename = "NumAchievements", default)]
     num_achievements: u32,
     #[serde(rename = "NumAwardedToUser", default)]
@@ -894,10 +908,30 @@ fn ra_fetch_link(app: &AppHandle, ra_game_id: u32) -> Result<RetroAchievementsLi
         });
     }
 
-    let icon_path = response.image_icon.as_ref().and_then(|relative| {
-        let url = format!("https://retroachievements.org{relative}");
-        download_to(&url, &cache_dir.join("icon.png")).ok()
-    });
+    let icon_url = response
+        .image_icon
+        .as_ref()
+        .filter(|relative| !relative.is_empty())
+        .map(|relative| format!("https://retroachievements.org{relative}"));
+    let box_art_url = response
+        .image_box_art
+        .as_ref()
+        .filter(|relative| !relative.is_empty())
+        .map(|relative| format!("https://retroachievements.org{relative}"));
+    let title_url = response
+        .image_title
+        .as_ref()
+        .filter(|relative| !relative.is_empty())
+        .map(|relative| format!("https://retroachievements.org{relative}"));
+    let ingame_url = response
+        .image_ingame
+        .as_ref()
+        .filter(|relative| !relative.is_empty())
+        .map(|relative| format!("https://retroachievements.org{relative}"));
+
+    let icon_path = icon_url
+        .as_ref()
+        .and_then(|url| download_to(url, &cache_dir.join("icon.png")).ok());
 
     Ok(RetroAchievementsLink {
         game_id: response.id,
@@ -905,6 +939,10 @@ fn ra_fetch_link(app: &AppHandle, ra_game_id: u32) -> Result<RetroAchievementsLi
         console_id: response.console_id,
         console_name: response.console_name,
         icon_path,
+        icon_url,
+        box_art_url,
+        title_url,
+        ingame_url,
         achievements_total: response.num_achievements,
         achievements_earned: response.num_awarded_to_user,
         points_total,

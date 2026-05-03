@@ -207,7 +207,7 @@
   $: if ($pickingVariantsFor) {
     pickerIndex = 0;
   }
-  let artworkSource: 'steamgriddb' | 'google' = 'steamgriddb';
+  let artworkSource: 'steamgriddb' | 'google' | 'retroachievements' = 'steamgriddb';
   let steamGridDbApiKey = '';
   let googleApiKey = '';
   let googleSearchEngineId = '';
@@ -999,6 +999,21 @@
     }
   }
 
+  async function applyRaArtwork(url: string | null, kind: 'cover' | 'hero' | 'logo') {
+    if (!url || !editingGame) return;
+    artworkBusy = 'Downloading RetroAchievements artwork';
+    artworkError = null;
+    try {
+      const path = await googleDownloadArtwork(url, kind, editingGame.id);
+      const field = kind === 'hero' ? 'heroImage' : kind === 'logo' ? 'logoImage' : 'coverImage';
+      editingGame = { ...editingGame, [field]: path };
+    } catch (error) {
+      artworkError = String(error);
+    } finally {
+      artworkBusy = null;
+    }
+  }
+
   async function applyGoogleArtwork(result: GoogleImageResult) {
     if (!editingGame) return;
 
@@ -1536,6 +1551,15 @@
                 <button type="button" class:selected={artworkSource === 'google'} on:click={() => (artworkSource = 'google')}>
                   Google
                 </button>
+                {#if effectiveAchievements(editingGame)}
+                  <button
+                    type="button"
+                    class:selected={artworkSource === 'retroachievements'}
+                    on:click={() => (artworkSource = 'retroachievements')}
+                  >
+                    RetroAchievements
+                  </button>
+                {/if}
               </div>
             </div>
 
@@ -1557,7 +1581,7 @@
                   Search
                 </button>
               </div>
-            {:else}
+            {:else if artworkSource === 'google'}
               <div class="path-row">
                 <input
                   type="password"
@@ -1660,6 +1684,55 @@
                   {/each}
                 </div>
               </div>
+            {/if}
+
+            {#if artworkSource === 'retroachievements'}
+              {@const ra = effectiveAchievements(editingGame)}
+              {#if ra}
+                {#if ra.boxArtUrl}
+                  <div class="artwork-section">
+                    <span>Box art (cover)</span>
+                    <div class="artwork-grid square">
+                      <button type="button" title="Use as cover" on:click={() => applyRaArtwork(ra.boxArtUrl, 'cover')}>
+                        <img src={ra.boxArtUrl} alt="" />
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+                {#if ra.titleUrl}
+                  <div class="artwork-section">
+                    <span>Title screen (hero)</span>
+                    <div class="artwork-grid wide">
+                      <button type="button" title="Use as hero" on:click={() => applyRaArtwork(ra.titleUrl, 'hero')}>
+                        <img src={ra.titleUrl} alt="" />
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+                {#if ra.ingameUrl}
+                  <div class="artwork-section">
+                    <span>In-game (hero)</span>
+                    <div class="artwork-grid wide">
+                      <button type="button" title="Use as hero" on:click={() => applyRaArtwork(ra.ingameUrl, 'hero')}>
+                        <img src={ra.ingameUrl} alt="" />
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+                {#if ra.iconUrl}
+                  <div class="artwork-section">
+                    <span>Icon (logo)</span>
+                    <div class="artwork-grid logo">
+                      <button type="button" title="Use as logo" on:click={() => applyRaArtwork(ra.iconUrl, 'logo')}>
+                        <img src={ra.iconUrl} alt="" />
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+                {#if !ra.boxArtUrl && !ra.titleUrl && !ra.ingameUrl && !ra.iconUrl}
+                  <div class="artwork-message">No RetroAchievements artwork available; refresh the link to fetch it.</div>
+                {/if}
+              {/if}
             {/if}
           </div>
 

@@ -26,6 +26,10 @@ export type RetroAchievementsLink = {
   consoleId: number;
   consoleName: string;
   iconPath: string | null;
+  iconUrl: string | null;
+  boxArtUrl: string | null;
+  titleUrl: string | null;
+  ingameUrl: string | null;
   achievementsTotal: number;
   achievementsEarned: number;
   pointsTotal: number;
