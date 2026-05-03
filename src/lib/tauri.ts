@@ -6,6 +6,7 @@ import type {
   Game,
   GameLibrary,
   GoogleImageResult,
+  RaGameSearchResult,
   SteamGridDbArtwork,
   SteamGridDbGame
 } from './types';
@@ -23,7 +24,9 @@ export async function loadSettings(): Promise<AppSettings> {
       steamgriddbApiKey: null,
       googleApiKey: null,
       googleSearchEngineId: null,
-      emudeckRoot: null
+      emudeckRoot: null,
+      retroAchievementsUser: null,
+      retroAchievementsApiKey: null
     };
   }
   return invoke<AppSettings>('load_settings');
@@ -163,6 +166,26 @@ export async function googleDownloadArtwork(url: string, kind: string, gameId: s
   return invoke<string>('google_download_artwork', { url, kind, gameId });
 }
 
+export async function retroAchievementsSearchGames(query: string, platformId: string): Promise<RaGameSearchResult[]> {
+  if (!isTauri) return [];
+  return invoke<RaGameSearchResult[]>('retroachievements_search_games', { query, platformId });
+}
+
+export async function retroAchievementsLinkGame(gameId: string, raGameId: number): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_link_game', { gameId, raGameId });
+}
+
+export async function retroAchievementsRefresh(gameId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_refresh', { gameId });
+}
+
+export async function retroAchievementsUnlink(gameId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('retroachievements_unlink', { gameId });
+}
+
 const demoGames: Game[] = [
   {
     id: 'demo-elden-ring',
@@ -180,7 +203,8 @@ const demoGames: Game[] = [
     platform: 'Windows',
     tags: ['Action RPG', 'Favorite'],
     romSystem: null,
-    variants: []
+    variants: [],
+    retroAchievements: null
   },
   {
     id: 'demo-hades',
@@ -198,7 +222,8 @@ const demoGames: Game[] = [
     platform: 'Windows',
     tags: ['Roguelite'],
     romSystem: null,
-    variants: []
+    variants: [],
+    retroAchievements: null
   },
   {
     id: 'demo-cyberpunk',
@@ -216,6 +241,7 @@ const demoGames: Game[] = [
     platform: 'Windows',
     tags: ['RPG'],
     romSystem: null,
-    variants: []
+    variants: [],
+    retroAchievements: null
   }
 ];

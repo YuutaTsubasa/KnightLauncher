@@ -10,8 +10,10 @@
     Image,
     Monitor,
     Play,
-    Sparkles,
-    Star
+    RefreshCw,
+    Star,
+    Trophy,
+    Unlink
   } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import { convertFileSrc } from '@tauri-apps/api/core';
@@ -20,6 +22,7 @@
   import {
     arrangeDisplays,
     loadSettings,
+    retroAchievementsSearchGames,
     saveSettings,
     selectExecutablePath,
     selectFolder,
@@ -31,9 +34,9 @@
     steamGridDbSearchGames,
     swapDisplays
   } from './lib/tauri';
-  import type { Game, GoogleImageResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
+  import type { Game, GoogleImageResult, RaGameSearchResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
   import PlatformBadge from './lib/PlatformBadge.svelte';
-  import { PLATFORMS, frameGradient, resolvePlatform } from './lib/platforms';
+  import { PLATFORMS, frameGradient, isRaSupported, resolvePlatform } from './lib/platforms';
   import {
     addExecutable,
     busyLabel,
@@ -45,20 +48,24 @@
     launchSelectedGame,
     launchState,
     launchVariant,
+    linkRetroAchievements,
     moveSelection,
     pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
+    refreshRetroAchievements,
     saveGameEdits,
     scanForGames,
     scanForRoms,
     selectedGame,
     selectedId,
-    toggleFavorite
+    showingAchievementsFor,
+    toggleFavorite,
+    unlinkRetroAchievements
   } from './lib/libraryStore';
 
   type WindowRole = 'single' | 'detail' | 'library';
-  type ControllerAction = 'next' | 'previous' | 'launch' | 'back' | 'swap' | 'favorite' | 'edit';
+  type ControllerAction = 'next' | 'previous' | 'launch' | 'back' | 'swap' | 'achievements' | 'edit';
 
   let windowRole: WindowRole = 'single';
   let displayMessage: string | null = null;
@@ -74,6 +81,12 @@
   let steamGridDbApiKey = '';
   let googleApiKey = '';
   let googleSearchEngineId = '';
+  let retroAchievementsUser = '';
+  let retroAchievementsApiKey = '';
+  let raSearchQuery = '';
+  let raSearchResults: RaGameSearchResult[] = [];
+  let raBusy: string | null = null;
+  let raError: string | null = null;
   let artworkQuery = '';
   let googleArtworkKind: 'cover' | 'hero' | 'logo' = 'hero';
   let artworkGames: SteamGridDbGame[] = [];
@@ -107,6 +120,8 @@
         steamGridDbApiKey = settings.steamgriddbApiKey ?? '';
         googleApiKey = settings.googleApiKey ?? '';
         googleSearchEngineId = settings.googleSearchEngineId ?? '';
+        retroAchievementsUser = settings.retroAchievementsUser ?? '';
+        retroAchievementsApiKey = settings.retroAchievementsApiKey ?? '';
       })
       .catch(() => {});
 
@@ -143,6 +158,16 @@
         })
       : Promise.resolve(() => {});
 
+    const unlistenGameFinished = isTauriRuntime
+      ? listen<string>('game-finished', (event) => {
+          const finishedId = event.payload;
+          const game = get(filteredGames).find((entry) => entry.id === finishedId);
+          if (game?.retroAchievements) {
+            refreshRetroAchievements(finishedId).catch(() => {});
+          }
+        })
+      : Promise.resolve(() => {});
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (editingGame && (event.key === 'Escape' || event.key.toLowerCase() === 'b')) {
         event.preventDefault();
@@ -153,6 +178,15 @@
       if (editingGame && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         saveEditor();
+        return;
+      }
+
+      if ($showingAchievementsFor) {
+        if (event.key === 'Escape' || event.key.toLowerCase() === 'b' || event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          showingAchievementsFor.set(null);
+          return;
+        }
         return;
       }
 
@@ -217,6 +251,10 @@
         event.preventDefault();
         openEditor();
       }
+      if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        toggleAchievementsModal();
+      }
     };
 
     const onRoleChange = (event: Event) => {
@@ -255,6 +293,7 @@
       selectedListener.then((unsubscribe) => unsubscribe());
       unlistenDisplaySync.then((unsubscribe) => unsubscribe());
       unlistenLibrarySync.then((unsubscribe) => unsubscribe());
+      unlistenGameFinished.then((unsubscribe) => unsubscribe());
       gamepadLoop.stop();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('knightlauncher-window-role', onRoleChange);
@@ -268,6 +307,13 @@
 
     if (editingGame) {
       if (action === 'back' || action === 'edit') closeEditor();
+      return;
+    }
+
+    if ($showingAchievementsFor) {
+      if (action === 'back' || action === 'achievements') {
+        showingAchievementsFor.set(null);
+      }
       return;
     }
 
@@ -320,9 +366,8 @@
       return;
     }
 
-    if (action === 'favorite') {
-      const game = get(selectedGame);
-      if (game) toggleFavorite(game);
+    if (action === 'achievements') {
+      toggleAchievementsModal();
       return;
     }
 
@@ -388,7 +433,7 @@
         emitOnce('a', pressed.a, 'launch');
         emitOnce('b', pressed.b, 'back');
         emitOnce('x', pressed.x, 'swap');
-        emitOnce('y', pressed.y, 'favorite');
+        emitOnce('y', pressed.y, 'achievements');
         emitOnce('menu', pressed.menu, 'edit');
         emitRepeated('right', pressed.right || pressed.down || pressed.rb, 'next', now);
         emitRepeated('left', pressed.left || pressed.up || pressed.lb, 'previous', now);
@@ -404,6 +449,112 @@
         cancelAnimationFrame(frame);
       }
     };
+  }
+
+  function toggleAchievementsModal() {
+    if ($showingAchievementsFor) {
+      showingAchievementsFor.set(null);
+      return;
+    }
+    const game = get(selectedGame);
+    if (!game?.retroAchievements) return;
+    showingAchievementsFor.set(game);
+  }
+
+  $: if ($showingAchievementsFor) {
+    const liveGame = $selectedGame;
+    if (liveGame && liveGame.id === $showingAchievementsFor.id && liveGame !== $showingAchievementsFor) {
+      showingAchievementsFor.set(liveGame);
+    }
+  }
+
+  async function saveRetroAchievementsSettings() {
+    raBusy = 'Saving RetroAchievements credentials';
+    raError = null;
+    try {
+      const current = await loadSettings();
+      const settings = await saveSettings({
+        ...current,
+        retroAchievementsUser: retroAchievementsUser.trim() || null,
+        retroAchievementsApiKey: retroAchievementsApiKey.trim() || null
+      });
+      retroAchievementsUser = settings.retroAchievementsUser ?? '';
+      retroAchievementsApiKey = settings.retroAchievementsApiKey ?? '';
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function searchRetroAchievementsGames() {
+    if (!editingGame) return;
+    const platformLabel = editingGame.platform ?? '';
+    const platformId = resolvePlatform(platformLabel).id;
+    const queryText = raSearchQuery.trim() || editingGame.title.trim();
+    if (!queryText) return;
+    raBusy = 'Searching RetroAchievements';
+    raError = null;
+    raSearchResults = [];
+    try {
+      raSearchResults = await retroAchievementsSearchGames(queryText, platformId);
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function applyRetroAchievementsLink(result: RaGameSearchResult) {
+    if (!editingGame) return;
+    raBusy = 'Linking RetroAchievements';
+    raError = null;
+    try {
+      await linkRetroAchievements(editingGame.id, result.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+      raSearchResults = [];
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function refreshRetroAchievementsLink() {
+    if (!editingGame) return;
+    raBusy = 'Refreshing RetroAchievements';
+    raError = null;
+    try {
+      await refreshRetroAchievements(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
+  }
+
+  async function unlinkRetroAchievementsLink() {
+    if (!editingGame) return;
+    raBusy = 'Unlinking RetroAchievements';
+    raError = null;
+    try {
+      await unlinkRetroAchievements(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      raError = String(error);
+    } finally {
+      raBusy = null;
+    }
   }
 
   function openEditor() {
@@ -658,9 +809,12 @@
         {/if}
       </div>
 
-      <div class="achievement-slot" aria-hidden="true">
-        <Sparkles size={18} />
-      </div>
+      {#if $selectedGame.retroAchievements}
+        <div class="achievement-slot" title="Achievements">
+          <Trophy size={18} />
+          <span>{$selectedGame.retroAchievements.achievementsEarned} / {$selectedGame.retroAchievements.achievementsTotal}</span>
+        </div>
+      {/if}
     {:else}
       <div class="hero-copy empty-hero">
         <div class="eyebrow">
@@ -694,6 +848,11 @@
           <button title="Edit selected game" on:click={openEditor} disabled={!$selectedGame}>
             <Pencil size={18} />
           </button>
+          {#if $selectedGame?.retroAchievements}
+            <button title="Achievements (Y)" on:click={toggleAchievementsModal}>
+              <Trophy size={18} />
+            </button>
+          {/if}
           <button title="Launch selected game" on:click={launchSelectedGame} disabled={!$selectedGame}>
             <Play size={18} fill="currentColor" />
           </button>
@@ -763,6 +922,38 @@
         </div>
       {/if}
     </div>
+
+    {#if $showingAchievementsFor && $showingAchievementsFor.retroAchievements}
+      {@const link = $showingAchievementsFor.retroAchievements}
+      <div class="achievements-panel" role="dialog" aria-label="Achievements">
+        <div class="achievements-header">
+          <div>
+            <p>Achievements</p>
+            <h3>{$showingAchievementsFor.title}</h3>
+            <small>{link.achievementsEarned} / {link.achievementsTotal} earned · {link.pointsEarned} / {link.pointsTotal} pts</small>
+          </div>
+          <button class="icon-action" title="Close" on:click={() => showingAchievementsFor.set(null)}>X</button>
+        </div>
+        <div class="achievements-list">
+          {#each link.achievements as ach}
+            <div class="achievement-row" class:earned={ach.earnedDate !== null}>
+              <img src={imageUrl(ach.earnedDate ? ach.badgePath : ach.badgeLockedPath)} alt="" />
+              <div class="achievement-meta">
+                <strong>{ach.title}</strong>
+                <p>{ach.description}</p>
+                <small>
+                  {#if ach.earnedDate}
+                    Earned {new Date(ach.earnedDate).toLocaleDateString()} · {ach.points} pts
+                  {:else}
+                    Locked · {ach.points} pts
+                  {/if}
+                </small>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     {#if $pickingVariantsFor}
       {@const picking = $pickingVariantsFor}
@@ -1034,6 +1225,94 @@
               </div>
             {/if}
           </div>
+
+          {#if isRaSupported(editingGame.platform)}
+            <div class="wide ra-section">
+              <div class="ra-heading">
+                <span>RetroAchievements</span>
+                <strong>Track progress for this game</strong>
+              </div>
+
+              <div class="path-row">
+                <input
+                  type="text"
+                  bind:value={retroAchievementsUser}
+                  placeholder="RA username"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="path-row">
+                <input
+                  type="password"
+                  bind:value={retroAchievementsApiKey}
+                  placeholder="RA API key"
+                  autocomplete="off"
+                />
+                <button type="button" on:click={saveRetroAchievementsSettings}>Save</button>
+              </div>
+
+              {#if raBusy}
+                <div class="artwork-message">{raBusy}</div>
+              {/if}
+              {#if raError}
+                <div class="artwork-message error">{raError}</div>
+              {/if}
+
+              {#if editingGame.retroAchievements}
+                {@const link = editingGame.retroAchievements}
+                <div class="ra-link">
+                  <strong>{link.title}</strong>
+                  <small>{link.consoleName}</small>
+                  <small>{link.achievementsEarned} / {link.achievementsTotal} achievements · {link.pointsEarned} / {link.pointsTotal} pts</small>
+                  {#if link.lastSyncedAt}
+                    <small>Last synced {new Date(link.lastSyncedAt).toLocaleString()}</small>
+                  {/if}
+                  <div class="path-row">
+                    <button type="button" on:click={refreshRetroAchievementsLink}>
+                      <RefreshCw size={14} />
+                      Refresh
+                    </button>
+                    <button type="button" on:click={unlinkRetroAchievementsLink}>
+                      <Unlink size={14} />
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              {:else}
+                <div class="path-row">
+                  <input
+                    type="text"
+                    bind:value={raSearchQuery}
+                    placeholder="Search RA games"
+                  />
+                  <button type="button" on:click={searchRetroAchievementsGames}>
+                    <Trophy size={14} />
+                    Search
+                  </button>
+                </div>
+
+                {#if raSearchResults.length}
+                  <div class="ra-results">
+                    {#each raSearchResults as result}
+                      <button
+                        type="button"
+                        class="ra-result-row"
+                        on:click={() => applyRetroAchievementsLink(result)}
+                      >
+                        {#if result.iconUrl}
+                          <img src={result.iconUrl} alt="" />
+                        {/if}
+                        <div class="ra-result-meta">
+                          <strong>{result.title}</strong>
+                          <small>{result.numAchievements} achievements · {result.points} pts</small>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/if}
 
           <label class="wide">
             <span>Tags</span>

@@ -227,15 +227,21 @@ h1 {
   position: absolute;
   right: 28px;
   bottom: 24px;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  place-items: center;
-  color: rgba(36, 92, 100, 0.48);
-  background: rgba(255, 255, 255, 0.52);
-  border: 1px solid rgba(95, 158, 170, 0.16);
-  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 14px;
+  color: #245c64;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(95, 158, 170, 0.24);
+  border-radius: 999px;
   backdrop-filter: blur(14px);
+}
+
+.achievement-slot span {
+  font-variant-numeric: tabular-nums;
 }
 
 .bottom-display {
@@ -545,6 +551,202 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ra-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(245, 247, 248, 0.72);
+  border: 1px solid rgba(21, 32, 38, 0.1);
+  border-radius: 8px;
+}
+
+.ra-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.ra-heading strong {
+  color: #152026;
+  font-size: 0.96rem;
+}
+
+.ra-link {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  color: #152026;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(21, 32, 38, 0.08);
+  border-radius: 8px;
+}
+
+.ra-link strong {
+  font-size: 1rem;
+}
+
+.ra-link small {
+  color: rgba(21, 32, 38, 0.6);
+  font-size: 0.78rem;
+}
+
+.ra-results {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ra-result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  color: #152026;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(21, 32, 38, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ra-result-row:hover,
+.ra-result-row:focus-visible {
+  border-color: #ffc857;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(255, 200, 87, 0.4);
+}
+
+.ra-result-row img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.ra-result-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ra-result-meta strong {
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ra-result-meta small {
+  color: rgba(21, 32, 38, 0.6);
+  font-size: 0.76rem;
+}
+
+.achievements-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  width: min(560px, calc(100% - 36px));
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(21, 32, 38, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(75, 92, 99, 0.22);
+  backdrop-filter: blur(18px);
+  z-index: 5;
+}
+
+.achievements-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.achievements-header p {
+  color: rgba(21, 32, 38, 0.52);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.achievements-header h3 {
+  color: #152026;
+  font-size: 1.2rem;
+}
+
+.achievements-header small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(21, 32, 38, 0.6);
+  font-size: 0.82rem;
+}
+
+.achievements-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.achievement-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+  color: #152026;
+  background: rgba(245, 247, 248, 0.9);
+  border: 1px solid rgba(21, 32, 38, 0.08);
+  border-radius: 8px;
+}
+
+.achievement-row.earned {
+  background: rgba(255, 200, 87, 0.16);
+  border-color: rgba(255, 200, 87, 0.5);
+}
+
+.achievement-row img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.achievement-row:not(.earned) img {
+  filter: grayscale(0.4) opacity(0.85);
+}
+
+.achievement-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.achievement-meta strong {
+  font-size: 0.96rem;
+}
+
+.achievement-meta p {
+  margin: 0;
+  color: rgba(21, 32, 38, 0.72);
+  font-size: 0.84rem;
+}
+
+.achievement-meta small {
+  color: rgba(21, 32, 38, 0.55);
+  font-size: 0.76rem;
 }
 
 .edit-panel-header,

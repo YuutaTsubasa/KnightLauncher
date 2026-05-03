@@ -325,3 +325,29 @@ export function resolvePlatform(name: string | null | undefined): Platform {
 export function frameGradient(platform: Platform): string {
   return `linear-gradient(135deg, ${platform.color1} 0%, ${platform.color1} 50%, ${platform.color2} 100%)`;
 }
+
+const RA_SUPPORTED_IDS = new Set([
+  'md',
+  'n64',
+  'sfc',
+  'gb',
+  'gba',
+  'gbc',
+  'fc',
+  '32x',
+  'sms',
+  'ps1',
+  'ngpc',
+  'gg',
+  'gc',
+  'ds',
+  'ps2',
+  'sat',
+  'dc',
+  'psp'
+]);
+
+export function isRaSupported(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return RA_SUPPORTED_IDS.has(resolvePlatform(name).id);
+}

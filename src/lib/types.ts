@@ -6,6 +6,43 @@ export type GameVariant = {
   playCount: number;
 };
 
+export type Achievement = {
+  id: number;
+  title: string;
+  description: string;
+  points: number;
+  badgeUrl: string;
+  badgeLockedUrl: string;
+  badgePath: string | null;
+  badgeLockedPath: string | null;
+  earnedDate: string | null;
+  displayOrder: number;
+};
+
+export type RetroAchievementsLink = {
+  gameId: number;
+  title: string;
+  consoleId: number;
+  consoleName: string;
+  iconPath: string | null;
+  achievementsTotal: number;
+  achievementsEarned: number;
+  pointsTotal: number;
+  pointsEarned: number;
+  achievements: Achievement[];
+  lastSyncedAt: string | null;
+};
+
+export type RaGameSearchResult = {
+  id: number;
+  title: string;
+  consoleId: number;
+  consoleName: string;
+  iconUrl: string | null;
+  numAchievements: number;
+  points: number;
+};
+
 export type Game = {
   id: string;
   title: string;
@@ -23,6 +60,7 @@ export type Game = {
   tags: string[];
   romSystem: string | null;
   variants: GameVariant[];
+  retroAchievements: RetroAchievementsLink | null;
 };
 
 export type GameLibrary = {
@@ -48,6 +86,8 @@ export type AppSettings = {
   googleApiKey: string | null;
   googleSearchEngineId: string | null;
   emudeckRoot: string | null;
+  retroAchievementsUser: string | null;
+  retroAchievementsApiKey: string | null;
 };
 
 export type SteamGridDbGame = {

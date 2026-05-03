@@ -7,6 +7,9 @@ import {
   loadLibrary,
   notifyLibraryChanged,
   removeGame,
+  retroAchievementsLinkGame,
+  retroAchievementsRefresh,
+  retroAchievementsUnlink,
   saveLibrary,
   scanEmudeckRoms,
   scanFolder,
@@ -25,6 +28,7 @@ export const busyLabel = writable<string | null>(null);
 export const errorMessage = writable<string | null>(null);
 export const launchState = writable<string | null>(null);
 export const pickingVariantsFor = writable<Game | null>(null);
+export const showingAchievementsFor = writable<Game | null>(null);
 
 export const selectedGame = derived([games, selectedId], ([$games, $selectedId]) => {
   return $games.find((game) => game.id === $selectedId) ?? $games[0] ?? null;
@@ -212,6 +216,56 @@ export async function launchVariant(game: Game, variantId: string) {
     errorMessage.set(String(error));
   } finally {
     window.setTimeout(() => launchState.set(null), 900);
+  }
+}
+
+export async function linkRetroAchievements(gameId: string, raGameId: number) {
+  busyLabel.set('Linking RetroAchievements');
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsLinkGame(gameId, raGameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function refreshRetroAchievements(gameId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsRefresh(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    const refreshed = library.games.find((entry) => entry.id === gameId);
+    if (refreshed) {
+      const current = get(showingAchievementsFor);
+      if (current && current.id === gameId) {
+        showingAchievementsFor.set(refreshed);
+      }
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function unlinkRetroAchievements(gameId: string) {
+  busyLabel.set('Unlinking RetroAchievements');
+  errorMessage.set(null);
+  try {
+    const library = await retroAchievementsUnlink(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
   }
 }
 
