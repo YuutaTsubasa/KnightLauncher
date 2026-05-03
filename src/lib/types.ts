@@ -68,6 +68,7 @@ export type Game = {
   retroAchievements: RetroAchievementsLink | null;
   position: number;
   hidden: boolean;
+  preferredAchievementVariantId: string | null;
 };
 
 export type GameLibrary = {

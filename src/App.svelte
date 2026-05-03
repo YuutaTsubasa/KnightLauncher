@@ -75,6 +75,7 @@
     scanForRoms,
     selectedGame,
     selectedId,
+    setPreferredVariantForAchievements,
     showingAchievementsFor,
     sortMode,
     splitVariantInto,
@@ -1199,16 +1200,41 @@
     </div>
 
     {#if $showingAchievementsFor && effectiveAchievements($showingAchievementsFor)}
-      {@const link = effectiveAchievements($showingAchievementsFor)!}
+      {@const game = $showingAchievementsFor}
+      {@const link = effectiveAchievements(game)!}
+      {@const variantOptions = game.variants.filter((variant) => variant.retroAchievements)}
+      {@const activeVariantId = variantOptions.find((variant) => variant.retroAchievements?.gameId === link.gameId)?.id ?? null}
       <div class="achievements-panel" role="dialog" aria-label="Achievements">
         <div class="achievements-header">
           <div>
             <p>Achievements</p>
-            <h3>{$showingAchievementsFor.title}</h3>
+            <h3>{game.title}</h3>
             <small>{link.achievementsEarned} / {link.achievementsTotal} earned · {link.pointsEarned} / {link.pointsTotal} pts</small>
           </div>
           <button class="icon-action" title="Close" on:click={() => showingAchievementsFor.set(null)}>X</button>
         </div>
+        {#if variantOptions.length > 0}
+          <div class="source-tabs achievement-tabs" role="tablist" aria-label="Achievement source">
+            {#if game.retroAchievements}
+              <button
+                type="button"
+                class:selected={activeVariantId === null}
+                on:click={() => setPreferredVariantForAchievements(game.id, null)}
+              >
+                Game
+              </button>
+            {/if}
+            {#each variantOptions as variant}
+              <button
+                type="button"
+                class:selected={activeVariantId === variant.id}
+                on:click={() => setPreferredVariantForAchievements(game.id, variant.id)}
+              >
+                {variant.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
         <div class="achievements-list">
           {#each link.achievements as ach}
             <div class="achievement-row" class:earned={ach.earnedDate !== null}>

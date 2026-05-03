@@ -846,6 +846,11 @@ h1 {
   font-size: 0.82rem;
 }
 
+.achievement-tabs {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
 .achievements-list {
   display: flex;
   min-height: 0;

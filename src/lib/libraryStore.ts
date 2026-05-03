@@ -21,6 +21,7 @@ import {
   selectExecutable,
   selectFolder,
   setGameHidden,
+  setPreferredAchievementVariant,
   splitVariant,
   swapGamePositions,
   upsertGame
@@ -351,6 +352,12 @@ export async function renameVariantLabel(gameId: string, variantId: string, labe
 }
 
 export function effectiveAchievements(game: Game): RetroAchievementsLink | null {
+  if (game.preferredAchievementVariantId) {
+    const preferred = game.variants.find((variant) => variant.id === game.preferredAchievementVariantId);
+    if (preferred?.retroAchievements) {
+      return preferred.retroAchievements;
+    }
+  }
   const overrideVariants = game.variants.filter((variant) => variant.retroAchievements);
   if (overrideVariants.length) {
     const sorted = [...overrideVariants].sort((left, right) => {
@@ -359,6 +366,25 @@ export function effectiveAchievements(game: Game): RetroAchievementsLink | null 
     return sorted[0].retroAchievements ?? game.retroAchievements ?? null;
   }
   return game.retroAchievements ?? null;
+}
+
+export async function setPreferredVariantForAchievements(gameId: string, variantId: string | null) {
+  errorMessage.set(null);
+  try {
+    const library = await setPreferredAchievementVariant(gameId, variantId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    const refreshed = library.games.find((entry) => entry.id === gameId);
+    if (refreshed) {
+      const current = get(showingAchievementsFor);
+      if (current && current.id === gameId) {
+        showingAchievementsFor.set(refreshed);
+      }
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
 }
 
 export async function scanForRoms() {

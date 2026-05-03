@@ -186,6 +186,11 @@ export async function renameVariant(gameId: string, variantId: string, label: st
   return invoke<GameLibrary>('rename_variant', { gameId, variantId, label });
 }
 
+export async function setPreferredAchievementVariant(gameId: string, variantId: string | null): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('set_preferred_achievement_variant', { gameId, variantId });
+}
+
 export async function swapGamePositions(gameIdA: string, gameIdB: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('swap_game_positions', { gameIdA, gameIdB });
@@ -226,7 +231,8 @@ const demoGames: Game[] = [
     variants: [],
     retroAchievements: null,
     position: 0,
-    hidden: false
+    hidden: false,
+    preferredAchievementVariantId: null
   },
   {
     id: 'demo-hades',
@@ -247,7 +253,8 @@ const demoGames: Game[] = [
     variants: [],
     retroAchievements: null,
     position: 0,
-    hidden: false
+    hidden: false,
+    preferredAchievementVariantId: null
   },
   {
     id: 'demo-cyberpunk',
@@ -268,6 +275,7 @@ const demoGames: Game[] = [
     variants: [],
     retroAchievements: null,
     position: 0,
-    hidden: false
+    hidden: false,
+    preferredAchievementVariantId: null
   }
 ];

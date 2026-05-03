@@ -105,6 +105,8 @@ pub struct Game {
     pub position: u32,
     #[serde(default)]
     pub hidden: bool,
+    #[serde(default)]
+    pub preferred_achievement_variant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -485,6 +487,7 @@ fn game_from_executable(path: PathBuf) -> Game {
         retro_achievements: None,
         position: 0,
         hidden: false,
+        preferred_achievement_variant_id: None,
     }
 }
 
@@ -1067,6 +1070,32 @@ fn retroachievements_unlink_variant(
 }
 
 #[tauri::command]
+fn set_preferred_achievement_variant(
+    app: AppHandle,
+    game_id: String,
+    variant_id: Option<String>,
+) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    if let Some(ref variant_id) = variant_id {
+        let exists = library.games[idx]
+            .variants
+            .iter()
+            .any(|variant| &variant.id == variant_id);
+        if !exists {
+            return Err("Variant not found.".to_string());
+        }
+    }
+    library.games[idx].preferred_achievement_variant_id = variant_id;
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
 fn rename_variant(
     app: AppHandle,
     game_id: String,
@@ -1499,6 +1528,7 @@ fn split_variant(
         retro_achievements: None,
         position,
         hidden: false,
+        preferred_achievement_variant_id: None,
     };
     library.games.push(new_game);
 
@@ -1737,6 +1767,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                     retro_achievements: None,
                     position: 0,
                     hidden: false,
+                    preferred_achievement_variant_id: None,
                 });
             }
         }
@@ -2012,6 +2043,7 @@ pub fn run() {
             retroachievements_link_variant,
             retroachievements_refresh_variant,
             retroachievements_unlink_variant,
+            set_preferred_achievement_variant,
             rename_variant,
             swap_game_positions,
             set_game_hidden,
