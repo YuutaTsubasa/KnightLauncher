@@ -334,7 +334,6 @@ fn steamgriddb_get<T: for<'de> Deserialize<'de>>(app: &AppHandle, path: &str) ->
 fn sgdb_assets(images: Vec<SteamGridDbImage>, kind: &str) -> Vec<SteamGridDbAsset> {
     images
         .into_iter()
-        .take(16)
         .map(|image| SteamGridDbAsset {
             id: image.id,
             kind: kind.to_string(),
@@ -1853,7 +1852,7 @@ fn steamgriddb_search_games(app: AppHandle, query: String) -> Result<Vec<SteamGr
 fn steamgriddb_game_artwork(app: AppHandle, game_id: u32) -> Result<SteamGridDbArtwork, String> {
     let covers = steamgriddb_get::<Vec<SteamGridDbImage>>(
         &app,
-        &format!("/grids/game/{game_id}?dimensions=600x900,342x482,660x930,512x512"),
+        &format!("/grids/game/{game_id}"),
     )
     .map(|images| sgdb_assets(images, "cover"))
     .unwrap_or_default();
