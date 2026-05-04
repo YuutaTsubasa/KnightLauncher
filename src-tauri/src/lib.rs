@@ -733,14 +733,23 @@ fn artwork_kind_from_label(label: &str) -> ArtworkKind {
     }
 }
 
+fn decode_image_no_limits(bytes: &[u8]) -> Result<image::DynamicImage, String> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|error| format!("Unable to read image header: {error}"))?;
+    reader.no_limits();
+    reader
+        .decode()
+        .map_err(|error| format!("Unable to decode image: {error}"))
+}
+
 fn save_bytes_as_webp(
     bytes: &[u8],
     target: &Path,
     kind: ArtworkKind,
 ) -> Result<PathBuf, String> {
     let webp_target = target.with_extension("webp");
-    let mut img = image::load_from_memory(bytes)
-        .map_err(|error| format!("Unable to decode image: {error}"))?;
+    let mut img = decode_image_no_limits(bytes)?;
     let (w, h) = (img.width(), img.height());
     let (max_w, max_h) = kind.max_dims();
     if w > max_w && h > max_h {
@@ -791,8 +800,20 @@ fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     if !p.exists() {
         return None;
     }
-    let bytes = fs::read(p).ok()?;
-    let img = image::load_from_memory(&bytes).ok()?;
+    let bytes = match fs::read(p) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("convert_image_path_to_webp read {}: {error}", p.display());
+            return None;
+        }
+    };
+    let img = match decode_image_no_limits(&bytes) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("convert_image_path_to_webp decode {}: {error}", p.display());
+            return None;
+        }
+    };
     let (w, h) = (img.width(), img.height());
     let (max_w, max_h) = kind.max_dims();
     let already_webp = path.to_lowercase().ends_with(".webp");
@@ -800,13 +821,13 @@ fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     if already_webp && !needs_resize {
         return None;
     }
-    let parent = p.parent().unwrap_or(Path::new(""));
-    let stem = p
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("artwork");
-    let target = parent.join(format!("{stem}-{}.webp", Uuid::new_v4()));
-    let saved = save_bytes_as_webp(&bytes, &target, kind).ok()?;
+    let saved = match save_bytes_as_webp(&bytes, p, kind) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("convert_image_path_to_webp save {}: {error}", p.display());
+            return None;
+        }
+    };
     if saved != p {
         let _ = fs::remove_file(p);
     }
@@ -1193,6 +1214,73 @@ fn set_preferred_achievement_variant(
     Ok(library)
 }
 
+fn collect_referenced_artwork_paths(library: &Library) -> HashSet<PathBuf> {
+    let mut keep: HashSet<PathBuf> = HashSet::new();
+    let push = |slot: &Option<String>, set: &mut HashSet<PathBuf>| {
+        if let Some(path) = slot {
+            if !path.is_empty() {
+                set.insert(PathBuf::from(path));
+            }
+        }
+    };
+    for game in &library.games {
+        push(&game.cover_image, &mut keep);
+        push(&game.hero_image, &mut keep);
+        push(&game.logo_image, &mut keep);
+        if let Some(link) = &game.retro_achievements {
+            push(&link.icon_path, &mut keep);
+            for achievement in &link.achievements {
+                push(&achievement.badge_path, &mut keep);
+                push(&achievement.badge_locked_path, &mut keep);
+            }
+        }
+        for variant in &game.variants {
+            if let Some(link) = &variant.retro_achievements {
+                push(&link.icon_path, &mut keep);
+                for achievement in &link.achievements {
+                    push(&achievement.badge_path, &mut keep);
+                    push(&achievement.badge_locked_path, &mut keep);
+                }
+            }
+        }
+    }
+    keep
+}
+
+fn cleanup_orphans_under(dir: &Path, keep: &HashSet<PathBuf>) -> u32 {
+    if !dir.is_dir() {
+        return 0;
+    }
+    let mut removed = 0u32;
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        if !keep.contains(path) && fs::remove_file(path).is_ok() {
+            removed = removed.saturating_add(1);
+        }
+    }
+    removed
+}
+
+#[tauri::command]
+fn cleanup_orphan_artwork(app: AppHandle) -> Result<u32, String> {
+    let library = read_library_from_disk(&app)?;
+    let keep = collect_referenced_artwork_paths(&library);
+
+    let mut removed = 0u32;
+    if let Ok(art_dir) = artwork_dir(&app) {
+        removed = removed.saturating_add(cleanup_orphans_under(&art_dir, &keep));
+    }
+    if let Ok(app_data) = app.path().app_data_dir() {
+        let ra_dir = app_data.join("retroachievements");
+        removed = removed.saturating_add(cleanup_orphans_under(&ra_dir, &keep));
+    }
+    Ok(removed)
+}
+
 #[tauri::command]
 fn convert_library_artwork_to_webp(app: AppHandle) -> Result<Library, String> {
     let mut library = read_library_from_disk(&app)?;
@@ -1228,6 +1316,18 @@ fn convert_library_artwork_to_webp(app: AppHandle) -> Result<Library, String> {
     }
 
     write_library_to_disk(&app, &library)?;
+
+    // Sweep any orphans (e.g. duplicated copies left behind by earlier
+    // versions of this command that wrote to a fresh uuid filename).
+    let keep = collect_referenced_artwork_paths(&library);
+    if let Ok(art_dir) = artwork_dir(&app) {
+        cleanup_orphans_under(&art_dir, &keep);
+    }
+    if let Ok(app_data) = app.path().app_data_dir() {
+        let ra_dir = app_data.join("retroachievements");
+        cleanup_orphans_under(&ra_dir, &keep);
+    }
+
     Ok(library)
 }
 
@@ -2410,6 +2510,7 @@ pub fn run() {
             retroachievements_unlink_variant,
             set_preferred_achievement_variant,
             convert_library_artwork_to_webp,
+            cleanup_orphan_artwork,
             rename_variant,
             swap_game_positions,
             set_game_hidden,
