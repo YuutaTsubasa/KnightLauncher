@@ -1029,7 +1029,7 @@
         <div
           class="hero-bg"
           style={heroBackgroundStyle($selectedGame)}
-          transition:fade={{ duration: 360 }}
+          transition:fade={{ duration: 240 }}
         ></div>
       {/key}
     {/if}
@@ -1059,8 +1059,8 @@
         {#key $selectedGame.id}
           <div
             class="hero-anim"
-            in:fly={{ y: 80, duration: 560, delay: 140, easing: cubicOut }}
-            out:fade={{ duration: 220 }}
+            in:fly={{ y: 60, duration: 360, delay: 40, easing: cubicOut }}
+            out:fade={{ duration: 160 }}
           >
             {#if $selectedGame.logoImage}
               <img
