@@ -306,7 +306,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.33")
+        .user_agent("KnightLauncher/0.1.34")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
