@@ -192,15 +192,32 @@
     return bestIdx >= 0 ? list[bestIdx].id : null;
   }
 
-  $: if ($selectedId) scrollSelectedCardIntoView($selectedId);
+  let ringTransform = '';
+  let ringWidth = 0;
+  let ringHeight = 0;
+  let ringVisible = false;
 
-  async function scrollSelectedCardIntoView(targetId: string) {
+  $: void $selectedId, $filteredGames, refreshSelectionRing();
+
+  async function refreshSelectionRing() {
     await tick();
+    if (!$selectedId) {
+      ringVisible = false;
+      return;
+    }
     const cards = document.querySelectorAll<HTMLElement>('.game-card');
     const list = $filteredGames;
-    const index = list.findIndex((entry) => entry.id === targetId);
-    if (index < 0 || !cards[index]) return;
-    cards[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const index = list.findIndex((entry) => entry.id === $selectedId);
+    if (index < 0 || !cards[index]) {
+      ringVisible = false;
+      return;
+    }
+    const card = cards[index];
+    ringTransform = `translate(${card.offsetLeft}px, ${card.offsetTop}px)`;
+    ringWidth = card.offsetWidth;
+    ringHeight = card.offsetHeight;
+    ringVisible = true;
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function handleArrowDirection(direction: ArrowDirection) {
@@ -444,10 +461,13 @@
       handleControllerAction(action);
     });
 
+    const onResize = () => refreshSelectionRing();
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('knightlauncher-window-role', onRoleChange);
     window.addEventListener('gamepadconnected', onGamepadConnected);
     window.addEventListener('gamepaddisconnected', onGamepadDisconnected);
+    window.addEventListener('resize', onResize);
     return () => {
       unsubscribeSelectedId();
       selectedListener.then((unsubscribe) => unsubscribe());
@@ -459,6 +479,7 @@
       window.removeEventListener('knightlauncher-window-role', onRoleChange);
       window.removeEventListener('gamepadconnected', onGamepadConnected);
       window.removeEventListener('gamepaddisconnected', onGamepadDisconnected);
+      window.removeEventListener('resize', onResize);
     };
   });
 
@@ -1191,6 +1212,13 @@
 
       {#if $filteredGames.length}
         <div class="game-grid" aria-label="Games">
+          <div
+            class="selection-ring"
+            class:visible={ringVisible}
+            class:reordering={$reorderMode}
+            style="transform: {ringTransform}; width: {ringWidth}px; height: {ringHeight}px;"
+            aria-hidden="true"
+          ></div>
           {#each $filteredGames as game}
             {@const platform = resolvePlatform(game.platform)}
             <button

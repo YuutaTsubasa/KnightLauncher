@@ -417,6 +417,34 @@ h1 {
   overflow-y: auto;
   scrollbar-width: none;
   padding: 4px 2px 18px;
+  position: relative;
+}
+
+.selection-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 18px;
+  opacity: 0;
+  z-index: 1;
+  transition:
+    transform 0.32s cubic-bezier(0.32, 0, 0.18, 1),
+    width 0.32s cubic-bezier(0.32, 0, 0.18, 1),
+    height 0.32s cubic-bezier(0.32, 0, 0.18, 1),
+    opacity 0.18s ease-out;
+  box-shadow:
+    0 0 0 6px rgba(255, 200, 87, 0.95),
+    0 0 0 11px rgba(255, 200, 87, 0.32),
+    0 22px 42px rgba(75, 92, 99, 0.28);
+}
+
+.selection-ring.visible {
+  opacity: 1;
+}
+
+.selection-ring.reordering {
+  animation: reorder-pulse 1s ease-in-out infinite;
 }
 
 .game-grid::-webkit-scrollbar {
@@ -480,31 +508,18 @@ h1 {
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
 }
 
-.game-card.selected .platform-frame {
-  box-shadow:
-    0 0 0 5px rgba(255, 200, 87, 0.95),
-    0 0 0 7px rgba(255, 200, 87, 0.35),
-    0 18px 34px rgba(75, 92, 99, 0.24);
-}
-
-.game-card.reordering .platform-frame {
-  animation: reorder-pulse 1s ease-in-out infinite;
-}
-
 @keyframes reorder-pulse {
   0%, 100% {
-    transform: translateY(0);
     box-shadow:
-      0 0 0 5px rgba(255, 200, 87, 0.95),
-      0 0 0 7px rgba(255, 200, 87, 0.35),
-      0 18px 34px rgba(75, 92, 99, 0.22);
+      0 0 0 6px rgba(255, 200, 87, 0.95),
+      0 0 0 11px rgba(255, 200, 87, 0.32),
+      0 22px 42px rgba(75, 92, 99, 0.28);
   }
   50% {
-    transform: translateY(-3px);
     box-shadow:
-      0 0 0 6px rgba(255, 200, 87, 1),
-      0 0 0 9px rgba(255, 200, 87, 0.45),
-      0 24px 40px rgba(75, 92, 99, 0.28);
+      0 0 0 8px rgba(255, 200, 87, 1),
+      0 0 0 14px rgba(255, 200, 87, 0.42),
+      0 26px 48px rgba(75, 92, 99, 0.32);
   }
 }
 

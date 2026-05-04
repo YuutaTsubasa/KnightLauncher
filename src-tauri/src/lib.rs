@@ -1729,7 +1729,6 @@ fn scan_steam_library(
         .iter()
         .filter_map(|game| game.steam_app_id.clone())
         .collect();
-    let cdn_base = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps";
 
     for steam_lib in libraries {
         let steamapps = steam_lib.join("steamapps");
@@ -1766,18 +1765,6 @@ fn scan_steam_library(
                 .filter(|value| !value.is_empty())
                 .unwrap_or_else(|| format!("Steam app {app_id}"));
 
-            let cover_url = format!("{cdn_base}/{app_id}/library_600x900_2x.jpg");
-            let hero_url = format!("{cdn_base}/{app_id}/library_hero.jpg");
-            let logo_url = format!("{cdn_base}/{app_id}/logo.png");
-
-            let cache = artwork_dir(&app)?;
-            let cover_image =
-                download_to(&cover_url, &cache.join(format!("steam-{app_id}-cover.jpg"))).ok();
-            let hero_image =
-                download_to(&hero_url, &cache.join(format!("steam-{app_id}-hero.jpg"))).ok();
-            let logo_image =
-                download_to(&logo_url, &cache.join(format!("steam-{app_id}-logo.png"))).ok();
-
             let position = next_position(&library);
             library.games.push(Game {
                 id: Uuid::new_v4().to_string(),
@@ -1785,9 +1772,9 @@ fn scan_steam_library(
                 executable_path: String::new(),
                 launch_args: String::new(),
                 working_directory: String::new(),
-                cover_image,
-                hero_image,
-                logo_image,
+                cover_image: None,
+                hero_image: None,
+                logo_image: None,
                 favorite: false,
                 last_played_at: None,
                 play_count: 0,
