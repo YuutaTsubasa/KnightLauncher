@@ -749,11 +749,21 @@ fn save_bytes_as_webp(
         let new_h = ((h as f64 * scale).round() as u32).max(1);
         img = img.resize(new_w, new_h, image::imageops::FilterType::Lanczos3);
     }
-    img.save_with_format(&webp_target, image::ImageFormat::WebP)
-        .map_err(|error| format!(
-            "Unable to encode {} as WebP: {error}",
+
+    let rgba = img.to_rgba8();
+    let encoder = webp::Encoder::from_rgba(rgba.as_raw(), rgba.width(), rgba.height());
+    let quality: f32 = match kind {
+        ArtworkKind::Cover | ArtworkKind::Hero => 80.0,
+        ArtworkKind::Logo => 90.0,
+        ArtworkKind::Badge => 88.0,
+    };
+    let webp_bytes = encoder.encode(quality);
+    fs::write(&webp_target, &*webp_bytes).map_err(|error| {
+        format!(
+            "Unable to write {} as WebP: {error}",
             webp_target.display()
-        ))?;
+        )
+    })?;
     Ok(webp_target)
 }
 
