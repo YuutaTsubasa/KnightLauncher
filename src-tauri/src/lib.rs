@@ -790,11 +790,17 @@ fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     if already_webp && !needs_resize {
         return None;
     }
-    let new_path = save_bytes_as_webp(&bytes, p, kind).ok()?;
-    if new_path != p {
+    let parent = p.parent().unwrap_or(Path::new(""));
+    let stem = p
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("artwork");
+    let target = parent.join(format!("{stem}-{}.webp", Uuid::new_v4()));
+    let saved = save_bytes_as_webp(&bytes, &target, kind).ok()?;
+    if saved != p {
         let _ = fs::remove_file(p);
     }
-    Some(new_path.to_string_lossy().to_string())
+    Some(saved.to_string_lossy().to_string())
 }
 
 fn convert_optional_to_webp(field: &mut Option<String>, kind: ArtworkKind) -> bool {
