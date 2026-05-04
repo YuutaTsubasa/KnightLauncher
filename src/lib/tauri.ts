@@ -197,6 +197,11 @@ export async function setPreferredAchievementVariant(gameId: string, variantId: 
   return invoke<GameLibrary>('set_preferred_achievement_variant', { gameId, variantId });
 }
 
+export async function convertLibraryArtworkToWebp(): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('convert_library_artwork_to_webp');
+}
+
 export async function swapGamePositions(gameIdA: string, gameIdB: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('swap_game_positions', { gameIdA, gameIdB });

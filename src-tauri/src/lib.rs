@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
     process::{Child, Command},
@@ -363,22 +362,6 @@ fn artwork_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn extension_from_url(url: &str) -> &str {
-    let path = url.split('?').next().unwrap_or(url);
-    match path
-        .rsplit('.')
-        .next()
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "jpg" | "jpeg" => "jpg",
-        "webp" => "webp",
-        "png" => "png",
-        _ => "png",
-    }
-}
-
 fn validate_download_url(url: &str) -> Result<(), String> {
     let parsed =
         reqwest::Url::parse(url).map_err(|error| format!("Invalid artwork URL: {error}"))?;
@@ -721,9 +704,22 @@ fn ra_cache_dir(app: &AppHandle, ra_game_id: u32) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+fn save_bytes_as_webp(bytes: &[u8], target: &Path) -> Result<PathBuf, String> {
+    let webp_target = target.with_extension("webp");
+    let img = image::load_from_memory(bytes)
+        .map_err(|error| format!("Unable to decode image: {error}"))?;
+    img.save_with_format(&webp_target, image::ImageFormat::WebP)
+        .map_err(|error| format!(
+            "Unable to encode {} as WebP: {error}",
+            webp_target.display()
+        ))?;
+    Ok(webp_target)
+}
+
 fn download_to(url: &str, target: &Path) -> Result<String, String> {
-    if target.exists() {
-        return Ok(target.to_string_lossy().to_string());
+    let final_target = target.with_extension("webp");
+    if final_target.exists() {
+        return Ok(final_target.to_string_lossy().to_string());
     }
     let response = http_client()?
         .get(url)
@@ -735,11 +731,37 @@ fn download_to(url: &str, target: &Path) -> Result<String, String> {
     let bytes = response
         .bytes()
         .map_err(|error| format!("Download read failed: {error}"))?;
-    let mut file = fs::File::create(target)
-        .map_err(|error| format!("Unable to create {}: {error}", target.display()))?;
-    file.write_all(&bytes)
-        .map_err(|error| format!("Unable to write {}: {error}", target.display()))?;
-    Ok(target.to_string_lossy().to_string())
+    let saved = save_bytes_as_webp(&bytes, target)?;
+    Ok(saved.to_string_lossy().to_string())
+}
+
+fn convert_image_path_to_webp(path: &str) -> Option<String> {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".webp") {
+        return None;
+    }
+    let p = Path::new(path);
+    if !p.exists() {
+        return None;
+    }
+    let bytes = fs::read(p).ok()?;
+    let new_path = save_bytes_as_webp(&bytes, p).ok()?;
+    if new_path != p {
+        let _ = fs::remove_file(p);
+    }
+    Some(new_path.to_string_lossy().to_string())
+}
+
+fn convert_optional_to_webp(field: &mut Option<String>) -> bool {
+    let Some(path) = field.as_ref() else {
+        return false;
+    };
+    if let Some(new_path) = convert_image_path_to_webp(path) {
+        *field = Some(new_path);
+        true
+    } else {
+        false
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1106,6 +1128,38 @@ fn set_preferred_achievement_variant(
 }
 
 #[tauri::command]
+fn convert_library_artwork_to_webp(app: AppHandle) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+
+    for game in library.games.iter_mut() {
+        convert_optional_to_webp(&mut game.cover_image);
+        convert_optional_to_webp(&mut game.hero_image);
+        convert_optional_to_webp(&mut game.logo_image);
+
+        if let Some(link) = game.retro_achievements.as_mut() {
+            convert_optional_to_webp(&mut link.icon_path);
+            for achievement in link.achievements.iter_mut() {
+                convert_optional_to_webp(&mut achievement.badge_path);
+                convert_optional_to_webp(&mut achievement.badge_locked_path);
+            }
+        }
+
+        for variant in game.variants.iter_mut() {
+            if let Some(link) = variant.retro_achievements.as_mut() {
+                convert_optional_to_webp(&mut link.icon_path);
+                for achievement in link.achievements.iter_mut() {
+                    convert_optional_to_webp(&mut achievement.badge_path);
+                    convert_optional_to_webp(&mut achievement.badge_locked_path);
+                }
+            }
+        }
+    }
+
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
 fn rename_variant(
     app: AppHandle,
     game_id: String,
@@ -1334,6 +1388,8 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
 
 #[tauri::command]
 fn save_library(app: AppHandle, library: Library) -> Result<Library, String> {
+    let mut library = library;
+    ensure_positions(&mut library);
     write_library_to_disk(&app, &library)?;
     Ok(library)
 }
@@ -1347,6 +1403,7 @@ fn upsert_game(app: AppHandle, game: Game) -> Result<Library, String> {
         None => library.games.push(game),
     }
 
+    ensure_positions(&mut library);
     library.games.sort_by_key(|game| game.title.to_lowercase());
     write_library_to_disk(&app, &library)?;
     Ok(library)
@@ -2170,18 +2227,13 @@ fn steamgriddb_download_artwork(
         return Err(format!("Artwork download returned HTTP {status}."));
     }
 
-    let extension = extension_from_url(&url);
     let path =
-        artwork_dir(&app)?.join(format!("{game_id}-{kind}-{}.{}", Uuid::new_v4(), extension));
+        artwork_dir(&app)?.join(format!("{game_id}-{kind}-{}.webp", Uuid::new_v4()));
     let bytes = response
         .bytes()
         .map_err(|error| format!("Unable to read artwork bytes: {error}"))?;
-    let mut file = fs::File::create(&path)
-        .map_err(|error| format!("Unable to create {}: {error}", path.display()))?;
-    file.write_all(&bytes)
-        .map_err(|error| format!("Unable to write {}: {error}", path.display()))?;
-
-    Ok(path.to_string_lossy().to_string())
+    let saved = save_bytes_as_webp(&bytes, &path)?;
+    Ok(saved.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -2213,21 +2265,15 @@ fn google_download_artwork(
         return Err("Selected Google result is not an image response.".to_string());
     }
 
-    let extension = extension_from_url(&url);
     let path = artwork_dir(&app)?.join(format!(
-        "{game_id}-google-{kind}-{}.{}",
-        Uuid::new_v4(),
-        extension
+        "{game_id}-google-{kind}-{}.webp",
+        Uuid::new_v4()
     ));
     let bytes = response
         .bytes()
         .map_err(|error| format!("Unable to read artwork bytes: {error}"))?;
-    let mut file = fs::File::create(&path)
-        .map_err(|error| format!("Unable to create {}: {error}", path.display()))?;
-    file.write_all(&bytes)
-        .map_err(|error| format!("Unable to write {}: {error}", path.display()))?;
-
-    Ok(path.to_string_lossy().to_string())
+    let saved = save_bytes_as_webp(&bytes, &path)?;
+    Ok(saved.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -2291,6 +2337,7 @@ pub fn run() {
             retroachievements_refresh_variant,
             retroachievements_unlink_variant,
             set_preferred_achievement_variant,
+            convert_library_artwork_to_webp,
             rename_variant,
             swap_game_positions,
             set_game_hidden,

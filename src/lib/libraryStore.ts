@@ -1,6 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
 import type { DisplayInfo, Game, LibraryFilter, SortMode } from './types';
 import {
+  convertLibraryArtworkToWebp,
   detectDisplays,
   launchGame,
   launchRomVariant,
@@ -400,6 +401,20 @@ export async function setPreferredVariantForAchievements(gameId: string, variant
     notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
+  }
+}
+
+export async function convertArtworkToWebp() {
+  busyLabel.set('Converting artwork to WebP');
+  errorMessage.set(null);
+  try {
+    const library = await convertLibraryArtworkToWebp();
+    games.set(library.games);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
   }
 }
 

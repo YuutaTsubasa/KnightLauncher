@@ -8,6 +8,7 @@
     Filter,
     FolderSearch,
     Gamepad2,
+    FileImage,
     Joystick,
     LibraryBig,
     Library,
@@ -49,6 +50,7 @@
   import {
     addExecutable,
     busyLabel,
+    convertArtworkToWebp,
     deleteGameById,
     displays,
     effectiveAchievements,
@@ -1166,6 +1168,9 @@
           </button>
           <button title="Scan Steam library" on:click={scanForSteam} disabled={!!$busyLabel}>
             <LibraryBig size={18} />
+          </button>
+          <button title="Convert all artwork to WebP" on:click={convertArtworkToWebp} disabled={!!$busyLabel}>
+            <FileImage size={18} />
           </button>
           <button
             title={$selectedGame?.hidden ? 'Unhide selected' : 'Hide selected'}
