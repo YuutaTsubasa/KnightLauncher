@@ -1724,6 +1724,23 @@ fn scan_steam_library(
     }
 
     let mut library = read_library_from_disk(&app)?;
+
+    // Drop any pre-existing duplicate Steam entries (same steam_app_id) so a
+    // re-scan after concurrent imports cleans itself up. Keep the first match.
+    {
+        let mut seen: HashSet<String> = HashSet::new();
+        library.games.retain(|game| {
+            let Some(app_id) = game.steam_app_id.as_ref() else {
+                return true;
+            };
+            if seen.contains(app_id) {
+                return false;
+            }
+            seen.insert(app_id.clone());
+            true
+        });
+    }
+
     let already_app_ids: HashSet<String> = library
         .games
         .iter()

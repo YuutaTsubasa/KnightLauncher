@@ -1134,16 +1134,16 @@
         </div>
 
         <div class="clean-actions">
-          <button title="Add executable" on:click={addExecutable}>
+          <button title="Add executable" on:click={addExecutable} disabled={!!$busyLabel}>
             <BadgePlus size={18} />
           </button>
-          <button title="Scan folder" on:click={scanForGames}>
+          <button title="Scan folder" on:click={scanForGames} disabled={!!$busyLabel}>
             <FolderSearch size={18} />
           </button>
-          <button title="Scan EmuDeck ROMs" on:click={scanForRoms}>
+          <button title="Scan EmuDeck ROMs" on:click={scanForRoms} disabled={!!$busyLabel}>
             <Joystick size={18} />
           </button>
-          <button title="Scan Steam library" on:click={scanForSteam}>
+          <button title="Scan Steam library" on:click={scanForSteam} disabled={!!$busyLabel}>
             <LibraryBig size={18} />
           </button>
           <button
