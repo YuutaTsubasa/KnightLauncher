@@ -201,24 +201,6 @@
 
   $: void $selectedId, $filteredGames, refreshSelectionRing();
 
-  let prefetchedSources = new Set<string>();
-  $: prefetchHeroAssets($filteredGames);
-
-  function prefetchHeroAssets(list: Game[]) {
-    if (!isTauriRuntime) return;
-    for (const game of list) {
-      for (const path of [game.heroImage, game.logoImage]) {
-        if (!path) continue;
-        const url = imageUrl(path);
-        if (!url || prefetchedSources.has(url)) continue;
-        prefetchedSources.add(url);
-        const img = document.createElement('img');
-        img.decoding = 'async';
-        img.src = url;
-        img.decode().catch(() => {});
-      }
-    }
-  }
 
   async function refreshSelectionRing() {
     await tick();
