@@ -704,10 +704,51 @@ fn ra_cache_dir(app: &AppHandle, ra_game_id: u32) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn save_bytes_as_webp(bytes: &[u8], target: &Path) -> Result<PathBuf, String> {
+#[derive(Copy, Clone)]
+enum ArtworkKind {
+    Cover,
+    Hero,
+    Logo,
+    Badge,
+}
+
+impl ArtworkKind {
+    fn max_dims(self) -> (u32, u32) {
+        match self {
+            ArtworkKind::Cover => (1024, 1536),
+            ArtworkKind::Hero => (1920, 1080),
+            ArtworkKind::Logo => (512, 512),
+            ArtworkKind::Badge => (256, 256),
+        }
+    }
+}
+
+fn artwork_kind_from_label(label: &str) -> ArtworkKind {
+    match label {
+        "cover" => ArtworkKind::Cover,
+        "hero" => ArtworkKind::Hero,
+        "logo" => ArtworkKind::Logo,
+        "icon" => ArtworkKind::Logo,
+        _ => ArtworkKind::Cover,
+    }
+}
+
+fn save_bytes_as_webp(
+    bytes: &[u8],
+    target: &Path,
+    kind: ArtworkKind,
+) -> Result<PathBuf, String> {
     let webp_target = target.with_extension("webp");
-    let img = image::load_from_memory(bytes)
+    let mut img = image::load_from_memory(bytes)
         .map_err(|error| format!("Unable to decode image: {error}"))?;
+    let (w, h) = (img.width(), img.height());
+    let (max_w, max_h) = kind.max_dims();
+    if w > max_w && h > max_h {
+        let scale = (max_w as f64 / w as f64).max(max_h as f64 / h as f64);
+        let new_w = ((w as f64 * scale).round() as u32).max(1);
+        let new_h = ((h as f64 * scale).round() as u32).max(1);
+        img = img.resize(new_w, new_h, image::imageops::FilterType::Lanczos3);
+    }
     img.save_with_format(&webp_target, image::ImageFormat::WebP)
         .map_err(|error| format!(
             "Unable to encode {} as WebP: {error}",
@@ -716,7 +757,7 @@ fn save_bytes_as_webp(bytes: &[u8], target: &Path) -> Result<PathBuf, String> {
     Ok(webp_target)
 }
 
-fn download_to(url: &str, target: &Path) -> Result<String, String> {
+fn download_to(url: &str, target: &Path, kind: ArtworkKind) -> Result<String, String> {
     let final_target = target.with_extension("webp");
     if final_target.exists() {
         return Ok(final_target.to_string_lossy().to_string());
@@ -731,32 +772,36 @@ fn download_to(url: &str, target: &Path) -> Result<String, String> {
     let bytes = response
         .bytes()
         .map_err(|error| format!("Download read failed: {error}"))?;
-    let saved = save_bytes_as_webp(&bytes, target)?;
+    let saved = save_bytes_as_webp(&bytes, target, kind)?;
     Ok(saved.to_string_lossy().to_string())
 }
 
-fn convert_image_path_to_webp(path: &str) -> Option<String> {
-    let lower = path.to_lowercase();
-    if lower.ends_with(".webp") {
-        return None;
-    }
+fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     let p = Path::new(path);
     if !p.exists() {
         return None;
     }
     let bytes = fs::read(p).ok()?;
-    let new_path = save_bytes_as_webp(&bytes, p).ok()?;
+    let img = image::load_from_memory(&bytes).ok()?;
+    let (w, h) = (img.width(), img.height());
+    let (max_w, max_h) = kind.max_dims();
+    let already_webp = path.to_lowercase().ends_with(".webp");
+    let needs_resize = w > max_w && h > max_h;
+    if already_webp && !needs_resize {
+        return None;
+    }
+    let new_path = save_bytes_as_webp(&bytes, p, kind).ok()?;
     if new_path != p {
         let _ = fs::remove_file(p);
     }
     Some(new_path.to_string_lossy().to_string())
 }
 
-fn convert_optional_to_webp(field: &mut Option<String>) -> bool {
+fn convert_optional_to_webp(field: &mut Option<String>, kind: ArtworkKind) -> bool {
     let Some(path) = field.as_ref() else {
         return false;
     };
-    if let Some(new_path) = convert_image_path_to_webp(path) {
+    if let Some(new_path) = convert_image_path_to_webp(path, kind) {
         *field = Some(new_path);
         true
     } else {
@@ -865,11 +910,16 @@ fn ra_fetch_link(app: &AppHandle, ra_game_id: u32) -> Result<RetroAchievementsLi
             "https://media.retroachievements.org/Badge/{}_lock.png",
             ach.badge_name
         );
-        let badge_path =
-            download_to(&badge_url, &cache_dir.join(format!("{}.png", ach.badge_name))).ok();
+        let badge_path = download_to(
+            &badge_url,
+            &cache_dir.join(format!("{}.png", ach.badge_name)),
+            ArtworkKind::Badge,
+        )
+        .ok();
         let badge_locked_path = download_to(
             &badge_locked_url,
             &cache_dir.join(format!("{}_lock.png", ach.badge_name)),
+            ArtworkKind::Badge,
         )
         .ok();
 
@@ -915,7 +965,7 @@ fn ra_fetch_link(app: &AppHandle, ra_game_id: u32) -> Result<RetroAchievementsLi
 
     let icon_path = icon_url
         .as_ref()
-        .and_then(|url| download_to(url, &cache_dir.join("icon.png")).ok());
+        .and_then(|url| download_to(url, &cache_dir.join("icon.png"), ArtworkKind::Logo).ok());
 
     Ok(RetroAchievementsLink {
         game_id: response.id,
@@ -1132,24 +1182,30 @@ fn convert_library_artwork_to_webp(app: AppHandle) -> Result<Library, String> {
     let mut library = read_library_from_disk(&app)?;
 
     for game in library.games.iter_mut() {
-        convert_optional_to_webp(&mut game.cover_image);
-        convert_optional_to_webp(&mut game.hero_image);
-        convert_optional_to_webp(&mut game.logo_image);
+        convert_optional_to_webp(&mut game.cover_image, ArtworkKind::Cover);
+        convert_optional_to_webp(&mut game.hero_image, ArtworkKind::Hero);
+        convert_optional_to_webp(&mut game.logo_image, ArtworkKind::Logo);
 
         if let Some(link) = game.retro_achievements.as_mut() {
-            convert_optional_to_webp(&mut link.icon_path);
+            convert_optional_to_webp(&mut link.icon_path, ArtworkKind::Logo);
             for achievement in link.achievements.iter_mut() {
-                convert_optional_to_webp(&mut achievement.badge_path);
-                convert_optional_to_webp(&mut achievement.badge_locked_path);
+                convert_optional_to_webp(&mut achievement.badge_path, ArtworkKind::Badge);
+                convert_optional_to_webp(
+                    &mut achievement.badge_locked_path,
+                    ArtworkKind::Badge,
+                );
             }
         }
 
         for variant in game.variants.iter_mut() {
             if let Some(link) = variant.retro_achievements.as_mut() {
-                convert_optional_to_webp(&mut link.icon_path);
+                convert_optional_to_webp(&mut link.icon_path, ArtworkKind::Logo);
                 for achievement in link.achievements.iter_mut() {
-                    convert_optional_to_webp(&mut achievement.badge_path);
-                    convert_optional_to_webp(&mut achievement.badge_locked_path);
+                    convert_optional_to_webp(&mut achievement.badge_path, ArtworkKind::Badge);
+                    convert_optional_to_webp(
+                        &mut achievement.badge_locked_path,
+                        ArtworkKind::Badge,
+                    );
                 }
             }
         }
@@ -2232,7 +2288,7 @@ fn steamgriddb_download_artwork(
     let bytes = response
         .bytes()
         .map_err(|error| format!("Unable to read artwork bytes: {error}"))?;
-    let saved = save_bytes_as_webp(&bytes, &path)?;
+    let saved = save_bytes_as_webp(&bytes, &path, artwork_kind_from_label(kind))?;
     Ok(saved.to_string_lossy().to_string())
 }
 
@@ -2272,7 +2328,7 @@ fn google_download_artwork(
     let bytes = response
         .bytes()
         .map_err(|error| format!("Unable to read artwork bytes: {error}"))?;
-    let saved = save_bytes_as_webp(&bytes, &path)?;
+    let saved = save_bytes_as_webp(&bytes, &path, artwork_kind_from_label(kind))?;
     Ok(saved.to_string_lossy().to_string())
 }
 
