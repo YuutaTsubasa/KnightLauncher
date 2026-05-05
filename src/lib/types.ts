@@ -70,6 +70,7 @@ export type Game = {
   hidden: boolean;
   preferredAchievementVariantId: string | null;
   steamAppId: string | null;
+  steamAchievements: RetroAchievementsLink | null;
 };
 
 export type GameLibrary = {
@@ -96,6 +97,7 @@ export type AppSettings = {
   retroAchievementsUser: string | null;
   retroAchievementsApiKey: string | null;
   steamRoot: string | null;
+  steamUserId: string | null;
 };
 
 export type SteamGridDbGame = {

@@ -25,6 +25,9 @@ import {
   setGameHidden,
   setPreferredAchievementVariant,
   splitVariant,
+  steamAchievementsLinkGame,
+  steamAchievementsRefresh,
+  steamAchievementsUnlink,
   swapGamePositions,
   upsertGame
 } from './tauri';
@@ -42,6 +45,7 @@ export const launchState = writable<string | null>(null);
 export const pickingVariantsFor = writable<Game | null>(null);
 export const showingAchievementsFor = writable<Game | null>(null);
 export const reorderMode = writable(false);
+export const pendingSteamRefresh = writable<{ gameId: string; launchedAt: number; lastRefreshedAt: number } | null>(null);
 
 export const selectedGame = derived([games, selectedId], ([$games, $selectedId]) => {
   return $games.find((game) => game.id === $selectedId) ?? $games[0] ?? null;
@@ -230,6 +234,10 @@ export async function launchSelectedGame() {
     const library = await launchGame(game.id);
     games.set(library.games);
     selectedId.set(game.id);
+    if (game.steamAppId) {
+      const now = Date.now();
+      pendingSteamRefresh.set({ gameId: game.id, launchedAt: now, lastRefreshedAt: now });
+    }
     notifyLibraryChanged().catch(() => {});
   } catch (error) {
     errorMessage.set(String(error));
@@ -369,6 +377,9 @@ export async function renameVariantLabel(gameId: string, variantId: string, labe
 }
 
 export function effectiveAchievements(game: Game): RetroAchievementsLink | null {
+  if (game.steamAchievements) {
+    return game.steamAchievements;
+  }
   if (game.preferredAchievementVariantId) {
     const preferred = game.variants.find((variant) => variant.id === game.preferredAchievementVariantId);
     if (preferred?.retroAchievements) {
@@ -383,6 +394,56 @@ export function effectiveAchievements(game: Game): RetroAchievementsLink | null 
     return sorted[0].retroAchievements ?? game.retroAchievements ?? null;
   }
   return game.retroAchievements ?? null;
+}
+
+export async function linkSteamAchievementsAction(gameId: string) {
+  busyLabel.set('Linking Steam achievements');
+  errorMessage.set(null);
+  try {
+    const library = await steamAchievementsLinkGame(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function refreshSteamAchievementsAction(gameId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await steamAchievementsRefresh(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    const refreshed = library.games.find((entry) => entry.id === gameId);
+    if (refreshed) {
+      const current = get(showingAchievementsFor);
+      if (current && current.id === gameId) {
+        showingAchievementsFor.set(refreshed);
+      }
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function unlinkSteamAchievementsAction(gameId: string) {
+  busyLabel.set('Unlinking Steam achievements');
+  errorMessage.set(null);
+  try {
+    const library = await steamAchievementsUnlink(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
+  }
 }
 
 export async function setPreferredVariantForAchievements(gameId: string, variantId: string | null) {

@@ -108,6 +108,8 @@ pub struct Game {
     pub preferred_achievement_variant_id: Option<String>,
     #[serde(default)]
     pub steam_app_id: Option<String>,
+    #[serde(default)]
+    pub steam_achievements: Option<RetroAchievementsLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -128,6 +130,8 @@ pub struct AppSettings {
     pub retro_achievements_api_key: Option<String>,
     #[serde(default)]
     pub steam_root: Option<String>,
+    #[serde(default)]
+    pub steam_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -476,6 +480,7 @@ fn game_from_executable(path: PathBuf) -> Game {
         hidden: false,
         preferred_achievement_variant_id: None,
         steam_app_id: None,
+        steam_achievements: None,
     }
 }
 
@@ -1553,6 +1558,7 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
         retro_achievements_user: normalize_optional_secret(settings.retro_achievements_user),
         retro_achievements_api_key: normalize_optional_secret(settings.retro_achievements_api_key),
         steam_root: normalize_optional_secret(settings.steam_root),
+        steam_user_id: normalize_optional_secret(settings.steam_user_id),
     };
     write_settings_to_disk(&app, &settings)?;
     Ok(settings)
@@ -1785,6 +1791,7 @@ fn split_variant(
         hidden: false,
         preferred_achievement_variant_id: None,
         steam_app_id: None,
+        steam_achievements: None,
     };
     library.games.push(new_game);
 
@@ -1883,6 +1890,39 @@ fn extract_vdf_value(content: &str, key: &str) -> Option<String> {
     Some(after[..q2].to_string())
 }
 
+fn detect_steam_user_id(steam_root: &Path) -> Option<String> {
+    let path = steam_root.join("config").join("loginusers.vdf");
+    let content = fs::read_to_string(&path).ok()?;
+
+    let mut current_id: Option<String> = None;
+    let mut first_id: Option<String> = None;
+    let mut most_recent_id: Option<String> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            if !stripped.contains('"')
+                && stripped.len() == 17
+                && stripped.starts_with("7656")
+                && stripped.chars().all(|c| c.is_ascii_digit())
+            {
+                current_id = Some(stripped.to_string());
+                if first_id.is_none() {
+                    first_id = current_id.clone();
+                }
+                continue;
+            }
+        }
+        if trimmed.starts_with("\"MostRecent\"") && trimmed.contains("\"1\"") {
+            if let Some(ref id) = current_id {
+                most_recent_id = Some(id.clone());
+            }
+        }
+    }
+
+    most_recent_id.or(first_id)
+}
+
 fn parse_library_folders(path: &Path) -> Vec<PathBuf> {
     let Ok(content) = fs::read_to_string(path) else {
         return Vec::new();
@@ -1941,6 +1981,16 @@ fn scan_steam_library(
 
     let mut settings = read_settings_from_disk(&app).unwrap_or_default();
     settings.steam_root = Some(root.to_string_lossy().to_string());
+    if settings
+        .steam_user_id
+        .as_deref()
+        .map(str::is_empty)
+        .unwrap_or(true)
+    {
+        if let Some(detected) = detect_steam_user_id(&root) {
+            settings.steam_user_id = Some(detected);
+        }
+    }
     write_settings_to_disk(&app, &settings)?;
 
     let mut libraries: Vec<PathBuf> = Vec::new();
@@ -2034,6 +2084,7 @@ fn scan_steam_library(
                 hidden: false,
                 preferred_achievement_variant_id: None,
                 steam_app_id: Some(app_id),
+                steam_achievements: None,
             });
         }
     }
@@ -2042,6 +2093,271 @@ fn scan_steam_library(
     library
         .games
         .sort_by_key(|game| game.title.to_lowercase());
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+struct RawSteamAchievement {
+    apiname: String,
+    name: String,
+    description: String,
+    icon_closed: String,
+    icon_open: String,
+    closed: bool,
+    unlock_ts: Option<i64>,
+}
+
+fn extract_xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let s = xml.find(&open)?;
+    let after = s + open.len();
+    let e = xml[after..].find(&close)? + after;
+    Some(xml[after..e].trim())
+}
+
+fn parse_steam_achievements_xml(xml: &str) -> Result<(String, Vec<RawSteamAchievement>), String> {
+    if xml.contains("<error>") || xml.contains("This profile is private") {
+        return Err(
+            "Steam profile or game stats are private. Please set your profile to Public."
+                .to_string(),
+        );
+    }
+    let game_name = extract_xml_text(xml, "gameName")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    let mut achievements = Vec::new();
+    let mut cursor = 0usize;
+    let needle = "<achievement closed=";
+
+    while let Some(found) = xml[cursor..].find(needle) {
+        let abs = cursor + found;
+        let after_open = &xml[abs + needle.len()..];
+        let closed = after_open.starts_with("\"1\"");
+        let block_end = match xml[abs..].find("</achievement>") {
+            Some(p) => abs + p,
+            None => break,
+        };
+        let block = &xml[abs..block_end];
+
+        let apiname = extract_xml_text(block, "apiname")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let name = extract_xml_text(block, "name")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let description = extract_xml_text(block, "description")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let icon_closed = extract_xml_text(block, "iconClosed")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let icon_open = extract_xml_text(block, "iconOpen")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let unlock_ts = extract_xml_text(block, "unlockTimestamp")
+            .and_then(|s| s.parse::<i64>().ok());
+
+        achievements.push(RawSteamAchievement {
+            apiname,
+            name,
+            description,
+            icon_closed,
+            icon_open,
+            closed,
+            unlock_ts,
+        });
+
+        cursor = block_end + "</achievement>".len();
+    }
+
+    Ok((game_name, achievements))
+}
+
+fn steam_cache_dir(app: &AppHandle, app_id: &str) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Unable to resolve app data directory: {error}"))?
+        .join("steam_achievements")
+        .join(app_id);
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("Unable to create Steam cache dir: {error}"))?;
+    Ok(dir)
+}
+
+fn fetch_steam_achievements_link(
+    app: &AppHandle,
+    steamid: &str,
+    app_id: &str,
+) -> Result<RetroAchievementsLink, String> {
+    let url = format!(
+        "https://steamcommunity.com/profiles/{steamid}/stats/{app_id}/achievements/?xml=1"
+    );
+    let response = http_client()?
+        .get(&url)
+        .header("User-Agent", "KnightLauncher")
+        .send()
+        .map_err(|error| format!("Unable to reach Steam community: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("Steam community returned HTTP {status}."));
+    }
+    let body = response
+        .text()
+        .map_err(|error| format!("Unable to read Steam response: {error}"))?;
+
+    let (game_name, raw) = parse_steam_achievements_xml(&body)?;
+
+    let cache_dir = steam_cache_dir(app, app_id)?;
+    let mut achievements: Vec<Achievement> = Vec::with_capacity(raw.len());
+    let mut earned: u32 = 0;
+
+    for (idx, item) in raw.iter().enumerate() {
+        let safe_name: String = item
+            .apiname
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        let stem = if safe_name.is_empty() {
+            format!("ach-{idx}")
+        } else {
+            safe_name
+        };
+
+        let badge_path = if !item.icon_closed.is_empty() {
+            download_to(
+                &item.icon_closed,
+                &cache_dir.join(format!("{stem}-earned.png")),
+                ArtworkKind::Badge,
+            )
+            .ok()
+        } else {
+            None
+        };
+        let badge_locked_path = if !item.icon_open.is_empty() {
+            download_to(
+                &item.icon_open,
+                &cache_dir.join(format!("{stem}-locked.png")),
+                ArtworkKind::Badge,
+            )
+            .ok()
+        } else {
+            None
+        };
+
+        let earned_date = if item.closed {
+            earned += 1;
+            item.unlock_ts
+                .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
+                .map(|dt| dt.to_rfc3339())
+                .or_else(|| Some(Utc::now().to_rfc3339()))
+        } else {
+            None
+        };
+
+        achievements.push(Achievement {
+            id: idx as u32,
+            title: item.name.clone(),
+            description: item.description.clone(),
+            points: 0,
+            badge_url: item.icon_closed.clone(),
+            badge_locked_url: item.icon_open.clone(),
+            badge_path,
+            badge_locked_path,
+            earned_date,
+            display_order: idx as u32,
+        });
+    }
+
+    let total = achievements.len() as u32;
+    let app_id_num = app_id.parse::<u32>().unwrap_or(0);
+
+    Ok(RetroAchievementsLink {
+        game_id: app_id_num,
+        title: game_name,
+        console_id: 0,
+        console_name: "Steam".to_string(),
+        icon_path: None,
+        icon_url: None,
+        box_art_url: None,
+        title_url: None,
+        ingame_url: None,
+        achievements_total: total,
+        achievements_earned: earned,
+        points_total: 0,
+        points_earned: 0,
+        achievements,
+        last_synced_at: Some(Utc::now().to_rfc3339()),
+    })
+}
+
+#[tauri::command]
+fn steam_achievements_link_game(app: AppHandle, game_id: String) -> Result<Library, String> {
+    let settings = read_settings_from_disk(&app)?;
+    let steamid = settings
+        .steam_user_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Steam user not detected. Run Scan Steam library first while signed in.".to_string()
+        })?;
+
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|g| g.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let app_id = library.games[idx]
+        .steam_app_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Game is not a Steam game.".to_string())?;
+
+    let link = fetch_steam_achievements_link(&app, &steamid, &app_id)?;
+    library.games[idx].steam_achievements = Some(link);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn steam_achievements_refresh(app: AppHandle, game_id: String) -> Result<Library, String> {
+    let settings = read_settings_from_disk(&app)?;
+    let steamid = settings
+        .steam_user_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Steam user not detected.".to_string())?;
+
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|g| g.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    let app_id = library.games[idx]
+        .steam_app_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Game is not a Steam game.".to_string())?;
+
+    let link = fetch_steam_achievements_link(&app, &steamid, &app_id)?;
+    library.games[idx].steam_achievements = Some(link);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn steam_achievements_unlink(app: AppHandle, game_id: String) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|g| g.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    library.games[idx].steam_achievements = None;
     write_library_to_disk(&app, &library)?;
     Ok(library)
 }
@@ -2242,6 +2558,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                     hidden: false,
                     preferred_achievement_variant_id: None,
                     steam_app_id: None,
+                    steam_achievements: None,
                 });
             }
         }
@@ -2499,6 +2816,9 @@ pub fn run() {
             scan_folder,
             scan_emudeck_roms,
             scan_steam_library,
+            steam_achievements_link_game,
+            steam_achievements_refresh,
+            steam_achievements_unlink,
             launch_game,
             launch_rom_variant,
             retroachievements_search_games,

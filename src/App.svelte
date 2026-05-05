@@ -75,10 +75,13 @@
     linkVariantRetroAchievements,
     mergeIntoTarget,
     moveSelection,
+    pendingSteamRefresh,
     pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
+    linkSteamAchievementsAction,
     refreshRetroAchievements,
+    refreshSteamAchievementsAction,
     refreshVariantRetroAchievements,
     renameVariantLabel,
     reorderMode,
@@ -96,6 +99,7 @@
     toggleFavorite,
     toggleHiddenForSelected,
     unlinkRetroAchievements,
+    unlinkSteamAchievementsAction,
     unlinkVariantRetroAchievements
   } from './lib/libraryStore';
   import type { LibraryFilter, SortMode } from './lib/types';
@@ -127,6 +131,8 @@
   let mergePickerQuery = '';
   type RaLinkTarget = { kind: 'game' } | { kind: 'variant'; id: string };
   let raLinkTarget: RaLinkTarget = { kind: 'game' };
+  let steamBusy: string | null = null;
+  let steamError: string | null = null;
 
   const FILTER_ORDER: LibraryFilter[] = ['all', 'favorites', 'recent', 'hidden'];
   const SORT_ORDER: SortMode[] = ['title', 'recent', 'playCount', 'manual'];
@@ -506,6 +512,16 @@
 
     const onResize = () => refreshSelectionRing();
 
+    const onWindowFocus = () => {
+      const pending = get(pendingSteamRefresh);
+      if (!pending) return;
+      const now = Date.now();
+      if (now - pending.launchedAt < 30_000) return;
+      if (now - pending.lastRefreshedAt < 30_000) return;
+      pendingSteamRefresh.set({ ...pending, lastRefreshedAt: now });
+      refreshSteamAchievementsAction(pending.gameId).catch(() => {});
+    };
+
     updateNow();
     const nowInterval = window.setInterval(updateNow, 1_000);
 
@@ -547,6 +563,7 @@
     window.addEventListener('resize', onResize);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    window.addEventListener('focus', onWindowFocus);
     return () => {
       unsubscribeSelectedId();
       selectedListener.then((unsubscribe) => unsubscribe());
@@ -561,6 +578,7 @@
       window.removeEventListener('resize', onResize);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
+      window.removeEventListener('focus', onWindowFocus);
       window.clearInterval(nowInterval);
       batteryCleanup?.();
     };
@@ -822,6 +840,57 @@
       raError = String(error);
     } finally {
       raBusy = null;
+    }
+  }
+
+  async function linkSteamAchievementsForGame() {
+    if (!editingGame) return;
+    steamBusy = 'Linking Steam achievements';
+    steamError = null;
+    try {
+      await linkSteamAchievementsAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      steamError = String(error);
+    } finally {
+      steamBusy = null;
+    }
+  }
+
+  async function refreshSteamAchievementsForGame() {
+    if (!editingGame) return;
+    steamBusy = 'Refreshing Steam achievements';
+    steamError = null;
+    try {
+      await refreshSteamAchievementsAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      steamError = String(error);
+    } finally {
+      steamBusy = null;
+    }
+  }
+
+  async function unlinkSteamAchievementsForGame() {
+    if (!editingGame) return;
+    steamBusy = 'Unlinking Steam achievements';
+    steamError = null;
+    try {
+      await unlinkSteamAchievementsAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      steamError = String(error);
+    } finally {
+      steamBusy = null;
     }
   }
 
@@ -1829,6 +1898,53 @@
               {/if}
             {/if}
           </div>
+
+          {#if editingGame.steamAppId}
+            <div class="wide ra-section">
+              <div class="ra-heading">
+                <span>Steam Achievements</span>
+                <strong>Public profile required</strong>
+              </div>
+
+              {#if steamBusy}
+                <div class="artwork-message">{steamBusy}</div>
+              {/if}
+              {#if steamError}
+                <div class="artwork-message error">{steamError}</div>
+              {/if}
+
+              {#if editingGame.steamAchievements}
+                {@const link = editingGame.steamAchievements}
+                <div class="ra-link">
+                  <strong>{link.title || 'Steam'}</strong>
+                  <small>{link.achievementsEarned} / {link.achievementsTotal} earned</small>
+                  {#if link.lastSyncedAt}
+                    <small>Last synced {new Date(link.lastSyncedAt).toLocaleString()}</small>
+                  {/if}
+                  <div class="path-row">
+                    <button type="button" on:click={refreshSteamAchievementsForGame}>
+                      <RefreshCw size={14} />
+                      Refresh
+                    </button>
+                    <button type="button" on:click={unlinkSteamAchievementsForGame}>
+                      <Unlink size={14} />
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              {:else}
+                <div class="path-row">
+                  <button type="button" on:click={linkSteamAchievementsForGame}>
+                    <Trophy size={14} />
+                    Link Steam achievements
+                  </button>
+                </div>
+                <small class="merge-hint">
+                  Pulls from your public Steam profile (no API key). Refreshes automatically when you come back to the launcher after playing.
+                </small>
+              {/if}
+            </div>
+          {/if}
 
           {#if isRaSupported(editingGame.platform)}
             <div class="wide ra-section">
