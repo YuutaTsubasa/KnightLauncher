@@ -2107,13 +2107,19 @@ struct RawSteamAchievement {
     unlock_ts: Option<i64>,
 }
 
-fn extract_xml_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
+fn extract_xml_text(xml: &str, tag: &str) -> Option<String> {
     let open = format!("<{tag}>");
     let close = format!("</{tag}>");
     let s = xml.find(&open)?;
     let after = s + open.len();
     let e = xml[after..].find(&close)? + after;
-    Some(xml[after..e].trim())
+    let raw = xml[after..e].trim();
+    let unwrapped = raw
+        .strip_prefix("<![CDATA[")
+        .and_then(|s| s.strip_suffix("]]>"))
+        .unwrap_or(raw)
+        .trim();
+    Some(unwrapped.to_string())
 }
 
 fn parse_steam_achievements_xml(xml: &str) -> Result<(String, Vec<RawSteamAchievement>), String> {
@@ -2123,9 +2129,7 @@ fn parse_steam_achievements_xml(xml: &str) -> Result<(String, Vec<RawSteamAchiev
                 .to_string(),
         );
     }
-    let game_name = extract_xml_text(xml, "gameName")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+    let game_name = extract_xml_text(xml, "gameName").unwrap_or_default();
 
     let mut achievements = Vec::new();
     let mut cursor = 0usize;
@@ -2141,21 +2145,11 @@ fn parse_steam_achievements_xml(xml: &str) -> Result<(String, Vec<RawSteamAchiev
         };
         let block = &xml[abs..block_end];
 
-        let apiname = extract_xml_text(block, "apiname")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let name = extract_xml_text(block, "name")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let description = extract_xml_text(block, "description")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let icon_closed = extract_xml_text(block, "iconClosed")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let icon_open = extract_xml_text(block, "iconOpen")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+        let apiname = extract_xml_text(block, "apiname").unwrap_or_default();
+        let name = extract_xml_text(block, "name").unwrap_or_default();
+        let description = extract_xml_text(block, "description").unwrap_or_default();
+        let icon_closed = extract_xml_text(block, "iconClosed").unwrap_or_default();
+        let icon_open = extract_xml_text(block, "iconOpen").unwrap_or_default();
         let unlock_ts = extract_xml_text(block, "unlockTimestamp")
             .and_then(|s| s.parse::<i64>().ok());
 
