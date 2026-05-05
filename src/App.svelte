@@ -3,6 +3,12 @@
     Activity,
     ArrowDownAZ,
     BadgePlus,
+    Battery,
+    BatteryCharging,
+    BatteryFull,
+    BatteryLow,
+    BatteryMedium,
+    Clock,
     Eye,
     EyeOff,
     Filter,
@@ -22,7 +28,9 @@
     Split,
     Star,
     Trophy,
-    Unlink
+    Unlink,
+    Wifi,
+    WifiOff
   } from 'lucide-svelte';
   import { onMount, tick } from 'svelte';
   import { convertFileSrc } from '@tauri-apps/api/core';
@@ -107,6 +115,11 @@
   let windowRole: WindowRole = 'single';
   let displayMessage: string | null = null;
   let controllerName: string | null = null;
+  let nowLabel = '';
+  let nowTooltip = '';
+  let batteryLevel: number | null = null;
+  let batteryCharging = false;
+  let online = typeof navigator !== 'undefined' ? navigator.onLine : true;
   let suppressSelectionBroadcast = false;
   let editingGame: Game | null = null;
   let pickerIndex = 0;
@@ -259,6 +272,28 @@
   let artworkError: string | null = null;
   const isTauriRuntime = '__TAURI_INTERNALS__' in window;
   const controllerRepeatMs = 180;
+
+  function updateNow() {
+    const date = new Date();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    nowLabel = `${month}/${day} ${hours}:${minutes}`;
+    nowTooltip = date.toLocaleString();
+  }
+
+  $: batteryIcon = batteryCharging
+    ? BatteryCharging
+    : batteryLevel === null
+      ? Battery
+      : batteryLevel >= 75
+        ? BatteryFull
+        : batteryLevel >= 35
+          ? BatteryMedium
+          : batteryLevel >= 15
+            ? BatteryLow
+            : Battery;
 
   function readWindowRole(): WindowRole {
     const role = new URLSearchParams(window.location.search).get('window');
@@ -466,11 +501,47 @@
 
     const onResize = () => refreshSelectionRing();
 
+    updateNow();
+    const nowInterval = window.setInterval(updateNow, 30_000);
+
+    const onOnline = () => (online = true);
+    const onOffline = () => (online = false);
+
+    let batteryCleanup: (() => void) | null = null;
+    const navAny = navigator as unknown as {
+      getBattery?: () => Promise<{
+        level: number;
+        charging: boolean;
+        addEventListener: (event: string, fn: () => void) => void;
+        removeEventListener: (event: string, fn: () => void) => void;
+      }>;
+    };
+    if (typeof navAny.getBattery === 'function') {
+      navAny
+        .getBattery()
+        .then((battery) => {
+          const sync = () => {
+            batteryLevel = Math.round(battery.level * 100);
+            batteryCharging = battery.charging;
+          };
+          sync();
+          battery.addEventListener('levelchange', sync);
+          battery.addEventListener('chargingchange', sync);
+          batteryCleanup = () => {
+            battery.removeEventListener('levelchange', sync);
+            battery.removeEventListener('chargingchange', sync);
+          };
+        })
+        .catch(() => {});
+    }
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('knightlauncher-window-role', onRoleChange);
     window.addEventListener('gamepadconnected', onGamepadConnected);
     window.addEventListener('gamepaddisconnected', onGamepadDisconnected);
     window.addEventListener('resize', onResize);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     return () => {
       unsubscribeSelectedId();
       selectedListener.then((unsubscribe) => unsubscribe());
@@ -483,6 +554,10 @@
       window.removeEventListener('gamepadconnected', onGamepadConnected);
       window.removeEventListener('gamepaddisconnected', onGamepadDisconnected);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.clearInterval(nowInterval);
+      batteryCleanup?.();
     };
   });
 
@@ -1070,12 +1145,25 @@
         </div>
       {/if}
 
-      {#if controllerName}
-        <div class="display-pill" title={controllerName}>
-          <Gamepad2 size={16} />
-          Controller
+      <div class="status-group">
+        <div class="display-pill" title={nowTooltip}>
+          <Clock size={14} />
+          {nowLabel}
         </div>
-      {/if}
+        {#if batteryLevel !== null}
+          <div class="display-pill" title={`Battery ${batteryLevel}%${batteryCharging ? ' (charging)' : ''}`}>
+            <svelte:component this={batteryIcon} size={14} />
+            {batteryLevel}%
+          </div>
+        {/if}
+        <div class="display-pill" title={online ? 'Online' : 'Offline'}>
+          {#if online}
+            <Wifi size={14} />
+          {:else}
+            <WifiOff size={14} />
+          {/if}
+        </div>
+      </div>
     </div>
 
     {#if $selectedGame}

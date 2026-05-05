@@ -125,9 +125,14 @@ main.detail-only .hero-logo {
 .display-pill,
 .clean-actions,
 .notice,
-.panel-row {
+.panel-row,
+.status-group {
   display: flex;
   align-items: center;
+}
+
+.status-group {
+  gap: 8px;
 }
 
 .status-bar {
@@ -416,7 +421,7 @@ h1 {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
-  padding: 4px 2px 18px;
+  padding: 18px 18px 28px;
   position: relative;
 }
 
