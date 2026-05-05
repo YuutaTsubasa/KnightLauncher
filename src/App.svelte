@@ -273,13 +273,18 @@
   const isTauriRuntime = '__TAURI_INTERNALS__' in window;
   const controllerRepeatMs = 180;
 
+  const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
   function updateNow() {
     const date = new Date();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    nowLabel = `${month}/${day} ${hours}:${minutes}`;
+    const yyyy = String(date.getFullYear());
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    const weekday = WEEKDAY_LABELS[date.getDay()];
+    nowLabel = `${yyyy}/${mm}/${dd} (${weekday}) ${hh}:${min}:${ss}`;
     nowTooltip = date.toLocaleString();
   }
 
@@ -502,7 +507,7 @@
     const onResize = () => refreshSelectionRing();
 
     updateNow();
-    const nowInterval = window.setInterval(updateNow, 30_000);
+    const nowInterval = window.setInterval(updateNow, 1_000);
 
     const onOnline = () => (online = true);
     const onOffline = () => (online = false);
