@@ -421,7 +421,7 @@ h1 {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
-  padding: 18px 18px 28px;
+  padding: 22px 22px 56px;
   position: relative;
 }
 
@@ -441,7 +441,7 @@ h1 {
   box-shadow:
     0 0 0 8px rgba(255, 200, 87, 0.95),
     0 0 0 14px rgba(255, 200, 87, 0.32),
-    0 22px 42px rgba(75, 92, 99, 0.28);
+    0 14px 28px rgba(75, 92, 99, 0.24);
 }
 
 .selection-ring.visible {
@@ -518,13 +518,13 @@ h1 {
     box-shadow:
       0 0 0 8px rgba(255, 200, 87, 0.95),
       0 0 0 14px rgba(255, 200, 87, 0.32),
-      0 22px 42px rgba(75, 92, 99, 0.28);
+      0 14px 28px rgba(75, 92, 99, 0.24);
   }
   50% {
     box-shadow:
       0 0 0 10px rgba(255, 200, 87, 1),
       0 0 0 17px rgba(255, 200, 87, 0.42),
-      0 26px 48px rgba(75, 92, 99, 0.32);
+      0 18px 32px rgba(75, 92, 99, 0.3);
   }
 }
 
