@@ -310,7 +310,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.40")
+        .user_agent("KnightLauncher/0.1.41")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -489,43 +489,44 @@ struct EmuSystem {
     platform_id: &'static str,
     extensions: &'static [&'static str],
     launchers: &'static [&'static str],
+    retroarch_core: Option<&'static str>,
 }
 
 const EMU_SYSTEMS: &[EmuSystem] = &[
-    EmuSystem { folder: "snes", platform_id: "sfc", extensions: &["smc", "sfc", "fig"], launchers: &["retroarch"] },
-    EmuSystem { folder: "nes", platform_id: "fc", extensions: &["nes"], launchers: &["retroarch"] },
-    EmuSystem { folder: "n64", platform_id: "n64", extensions: &["n64", "z64", "v64"], launchers: &["retroarch"] },
-    EmuSystem { folder: "gb", platform_id: "gb", extensions: &["gb"], launchers: &["retroarch"] },
-    EmuSystem { folder: "gbc", platform_id: "gbc", extensions: &["gbc", "gb"], launchers: &["retroarch"] },
-    EmuSystem { folder: "gba", platform_id: "gba", extensions: &["gba"], launchers: &["retroarch"] },
-    EmuSystem { folder: "nds", platform_id: "ds", extensions: &["nds"], launchers: &["melonDS", "retroarch"] },
-    EmuSystem { folder: "n3ds", platform_id: "3ds", extensions: &["3ds", "cci", "cia", "app", "cxi"], launchers: &["azahar"] },
-    EmuSystem { folder: "gc", platform_id: "gc", extensions: &["iso", "gcm", "ciso", "rvz", "wbfs"], launchers: &["dolphin"] },
-    EmuSystem { folder: "wii", platform_id: "wii", extensions: &["iso", "wbfs", "rvz", "wad"], launchers: &["dolphin", "primehack"] },
-    EmuSystem { folder: "wiiu", platform_id: "wiiu", extensions: &["wud", "wux", "wua", "rpx"], launchers: &["Cemu"] },
-    EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"], launchers: &["Ryujinx"] },
-    EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
-    EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"] },
-    EmuSystem { folder: "sega32x", platform_id: "32x", extensions: &["32x", "md", "smd", "bin"], launchers: &["retroarch"] },
-    EmuSystem { folder: "segacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
-    EmuSystem { folder: "megacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
-    EmuSystem { folder: "sega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
-    EmuSystem { folder: "mega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"] },
-    EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"] },
-    EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"] },
-    EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"] },
-    EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"], launchers: &["retroarch"] },
-    EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"], launchers: &["duckstation", "retroarch"] },
-    EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"], launchers: &["pcsx2"] },
-    EmuSystem { folder: "ps3", platform_id: "ps3", extensions: &["iso", "pkg", "rap"], launchers: &["rpcs3"] },
-    EmuSystem { folder: "ps4", platform_id: "ps4", extensions: &["pkg", "iso"], launchers: &["shadps4"] },
-    EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"], launchers: &["PPSSPP"] },
-    EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"], launchers: &["Vita3K"] },
-    EmuSystem { folder: "ngp", platform_id: "ngpc", extensions: &["ngp"], launchers: &["retroarch"] },
-    EmuSystem { folder: "ngpc", platform_id: "ngpc", extensions: &["ngc"], launchers: &["retroarch"] },
-    EmuSystem { folder: "xbox", platform_id: "xbox", extensions: &["iso", "xbe"], launchers: &["xemu"] },
-    EmuSystem { folder: "xbox360", platform_id: "xbox360", extensions: &["iso", "xex"], launchers: &["xenia"] },
-    EmuSystem { folder: "scummvm", platform_id: "scummvm", extensions: &["scummvm"], launchers: &["ScummVM"] },
+    EmuSystem { folder: "snes", platform_id: "sfc", extensions: &["smc", "sfc", "fig"], launchers: &["retroarch"], retroarch_core: Some("snes9x_libretro.dll") },
+    EmuSystem { folder: "nes", platform_id: "fc", extensions: &["nes"], launchers: &["retroarch"], retroarch_core: Some("nestopia_libretro.dll") },
+    EmuSystem { folder: "n64", platform_id: "n64", extensions: &["n64", "z64", "v64"], launchers: &["retroarch"], retroarch_core: Some("mupen64plus_next_libretro.dll") },
+    EmuSystem { folder: "gb", platform_id: "gb", extensions: &["gb"], launchers: &["retroarch"], retroarch_core: Some("gambatte_libretro.dll") },
+    EmuSystem { folder: "gbc", platform_id: "gbc", extensions: &["gbc", "gb"], launchers: &["retroarch"], retroarch_core: Some("gambatte_libretro.dll") },
+    EmuSystem { folder: "gba", platform_id: "gba", extensions: &["gba"], launchers: &["retroarch"], retroarch_core: Some("mgba_libretro.dll") },
+    EmuSystem { folder: "nds", platform_id: "ds", extensions: &["nds"], launchers: &["melonDS", "retroarch"], retroarch_core: Some("melonds_libretro.dll") },
+    EmuSystem { folder: "n3ds", platform_id: "3ds", extensions: &["3ds", "cci", "cia", "app", "cxi"], launchers: &["azahar"], retroarch_core: None },
+    EmuSystem { folder: "gc", platform_id: "gc", extensions: &["iso", "gcm", "ciso", "rvz", "wbfs"], launchers: &["dolphin"], retroarch_core: None },
+    EmuSystem { folder: "wii", platform_id: "wii", extensions: &["iso", "wbfs", "rvz", "wad"], launchers: &["dolphin", "primehack"], retroarch_core: None },
+    EmuSystem { folder: "wiiu", platform_id: "wiiu", extensions: &["wud", "wux", "wua", "rpx"], launchers: &["Cemu"], retroarch_core: None },
+    EmuSystem { folder: "switch", platform_id: "switch", extensions: &["nsp", "xci"], launchers: &["Ryujinx"], retroarch_core: None },
+    EmuSystem { folder: "genesis", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "megadrive", platform_id: "md", extensions: &["md", "smd", "bin", "gen"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "sega32x", platform_id: "32x", extensions: &["32x", "md", "smd", "bin"], launchers: &["retroarch"], retroarch_core: Some("picodrive_libretro.dll") },
+    EmuSystem { folder: "segacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "megacd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "sega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "mega-cd", platform_id: "segacd", extensions: &["cue", "iso", "chd", "bin", "img"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "saturn", platform_id: "sat", extensions: &["cue", "iso", "chd", "mds"], launchers: &["retroarch"], retroarch_core: Some("mednafen_saturn_libretro.dll") },
+    EmuSystem { folder: "dreamcast", platform_id: "dc", extensions: &["gdi", "cdi", "cue", "chd"], launchers: &["retroarch"], retroarch_core: Some("flycast_libretro.dll") },
+    EmuSystem { folder: "gamegear", platform_id: "gg", extensions: &["gg"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
+    EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"], launchers: &["duckstation", "retroarch"], retroarch_core: Some("swanstation_libretro.dll") },
+    EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"], launchers: &["pcsx2"], retroarch_core: None },
+    EmuSystem { folder: "ps3", platform_id: "ps3", extensions: &["iso", "pkg", "rap"], launchers: &["rpcs3"], retroarch_core: None },
+    EmuSystem { folder: "ps4", platform_id: "ps4", extensions: &["pkg", "iso"], launchers: &["shadps4"], retroarch_core: None },
+    EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"], launchers: &["PPSSPP"], retroarch_core: None },
+    EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"], launchers: &["Vita3K"], retroarch_core: None },
+    EmuSystem { folder: "ngp", platform_id: "ngpc", extensions: &["ngp"], launchers: &["retroarch"], retroarch_core: Some("mednafen_ngp_libretro.dll") },
+    EmuSystem { folder: "ngpc", platform_id: "ngpc", extensions: &["ngc"], launchers: &["retroarch"], retroarch_core: Some("mednafen_ngp_libretro.dll") },
+    EmuSystem { folder: "xbox", platform_id: "xbox", extensions: &["iso", "xbe"], launchers: &["xemu"], retroarch_core: None },
+    EmuSystem { folder: "xbox360", platform_id: "xbox360", extensions: &["iso", "xex"], launchers: &["xenia"], retroarch_core: None },
+    EmuSystem { folder: "scummvm", platform_id: "scummvm", extensions: &["scummvm"], launchers: &["ScummVM"], retroarch_core: None },
 ];
 
 fn find_emudeck_subdir(root: &Path, segments: &[&str]) -> Option<PathBuf> {
@@ -542,13 +543,16 @@ fn find_emudeck_subdir(root: &Path, segments: &[&str]) -> Option<PathBuf> {
     None
 }
 
-fn locate_launcher(emudeck_root: &Path, candidates: &[&str]) -> Option<PathBuf> {
+fn locate_launcher<'a>(
+    emudeck_root: &Path,
+    candidates: &'a [&'a str],
+) -> Option<(PathBuf, &'a str)> {
     let dir = find_emudeck_subdir(emudeck_root, &["tools", "launchers"])?;
     for name in candidates {
         for ext in &["ps1", "bat", "cmd"] {
             let candidate = dir.join(format!("{name}.{ext}"));
             if candidate.exists() {
-                return Some(candidate);
+                return Some((candidate, *name));
             }
         }
     }
@@ -559,7 +563,11 @@ fn lookup_emu_system(folder: &str) -> Option<&'static EmuSystem> {
     EMU_SYSTEMS.iter().find(|system| system.folder == folder)
 }
 
-fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<Child, String> {
+fn spawn_launcher(
+    launcher: &Path,
+    rom_path: &Path,
+    extra_args: &[&str],
+) -> Result<Child, String> {
     let ext = launcher
         .extension()
         .and_then(|value| value.to_str())
@@ -568,7 +576,11 @@ fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<Child, String> {
     let mut command = match ext.as_str() {
         "bat" | "cmd" => {
             let mut c = Command::new("cmd");
-            c.arg("/c").arg(launcher).arg(rom_path);
+            c.arg("/c").arg(launcher);
+            for arg in extra_args {
+                c.arg(arg);
+            }
+            c.arg(rom_path);
             c
         }
         "ps1" => {
@@ -576,8 +588,11 @@ fn spawn_launcher(launcher: &Path, rom_path: &Path) -> Result<Child, String> {
             c.arg("-ExecutionPolicy")
                 .arg("Bypass")
                 .arg("-File")
-                .arg(launcher)
-                .arg(rom_path);
+                .arg(launcher);
+            for arg in extra_args {
+                c.arg(arg);
+            }
+            c.arg(rom_path);
             c
         }
         other => return Err(format!("Unsupported launcher type: {other}")),
@@ -2603,14 +2618,22 @@ fn launch_rom_variant(
 
     let definition = lookup_emu_system(&system)
         .ok_or_else(|| format!("Unknown ROM system '{system}'."))?;
-    let launcher = locate_launcher(&emudeck_path, definition.launchers).ok_or_else(|| {
-        format!(
-            "Launcher not found for system '{system}'. Tried: {} under {}",
-            definition.launchers.join(", "),
-            emudeck_path.display()
-        )
-    })?;
-    let child = spawn_launcher(&launcher, &rom_path)?;
+    let (launcher, launcher_name) = locate_launcher(&emudeck_path, definition.launchers)
+        .ok_or_else(|| {
+            format!(
+                "Launcher not found for system '{system}'. Tried: {} under {}",
+                definition.launchers.join(", "),
+                emudeck_path.display()
+            )
+        })?;
+    let mut extra_args: Vec<&str> = Vec::new();
+    if launcher_name == "retroarch" {
+        if let Some(core) = definition.retroarch_core {
+            extra_args.push("-L");
+            extra_args.push(core);
+        }
+    }
+    let child = spawn_launcher(&launcher, &rom_path, &extra_args)?;
     handoff_focus_to_child(&app, child, game_id.clone(), Some(variant_id.clone()));
 
     let now = Utc::now().to_rfc3339();
