@@ -110,6 +110,8 @@ pub struct Game {
     pub steam_app_id: Option<String>,
     #[serde(default)]
     pub steam_achievements: Option<RetroAchievementsLink>,
+    #[serde(default)]
+    pub ps3_trophies: Option<RetroAchievementsLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -134,6 +136,8 @@ pub struct AppSettings {
     pub steam_user_id: Option<String>,
     #[serde(default)]
     pub rpcs3_games_root: Option<String>,
+    #[serde(default)]
+    pub rpcs3_trophy_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -312,7 +316,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.42")
+        .user_agent("KnightLauncher/0.1.43")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -483,6 +487,7 @@ fn game_from_executable(path: PathBuf) -> Game {
         preferred_achievement_variant_id: None,
         steam_app_id: None,
         steam_achievements: None,
+        ps3_trophies: None,
     }
 }
 
@@ -1577,6 +1582,7 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
         steam_root: normalize_optional_secret(settings.steam_root),
         steam_user_id: normalize_optional_secret(settings.steam_user_id),
         rpcs3_games_root: normalize_optional_secret(settings.rpcs3_games_root),
+        rpcs3_trophy_root: normalize_optional_secret(settings.rpcs3_trophy_root),
     };
     write_settings_to_disk(&app, &settings)?;
     Ok(settings)
@@ -1810,6 +1816,7 @@ fn split_variant(
         preferred_achievement_variant_id: None,
         steam_app_id: None,
         steam_achievements: None,
+        ps3_trophies: None,
     };
     library.games.push(new_game);
 
@@ -2103,6 +2110,7 @@ fn scan_steam_library(
                 preferred_achievement_variant_id: None,
                 steam_app_id: Some(app_id),
                 steam_achievements: None,
+                ps3_trophies: None,
             });
         }
     }
@@ -2571,6 +2579,7 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
                     preferred_achievement_variant_id: None,
                     steam_app_id: None,
                     steam_achievements: None,
+                    ps3_trophies: None,
                 });
             }
         }
@@ -2725,6 +2734,7 @@ fn scan_rpcs3_games(app: AppHandle, root: String) -> Result<Library, String> {
             preferred_achievement_variant_id: None,
             steam_app_id: None,
             steam_achievements: None,
+            ps3_trophies: None,
         });
     }
 
@@ -2734,6 +2744,433 @@ fn scan_rpcs3_games(app: AppHandle, root: String) -> Result<Library, String> {
         .sort_by_key(|game| game.title.to_lowercase());
     write_library_to_disk(&app, &library)?;
     Ok(library)
+}
+
+fn detect_rpcs3_trophy_root(settings: &AppSettings) -> Option<PathBuf> {
+    if let Some(stored) = settings
+        .rpcs3_trophy_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let path = PathBuf::from(stored);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+    let games_root = settings
+        .rpcs3_games_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    let dev_hdd0 = PathBuf::from(games_root).parent()?.to_path_buf();
+    let home = dev_hdd0.join("home");
+    if !home.is_dir() {
+        return None;
+    }
+    let mut candidates: Vec<PathBuf> = fs::read_dir(&home)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("trophy"))
+        .filter(|path| path.is_dir())
+        .collect();
+    candidates.sort();
+    candidates.into_iter().next()
+}
+
+fn find_trophy_folder_for_game(
+    trophy_root: &Path,
+    game_title: &str,
+) -> Option<(PathBuf, Ps3TrophySet)> {
+    let target = normalize_match_title(game_title);
+    if target.is_empty() {
+        return None;
+    }
+    let entries = fs::read_dir(trophy_root).ok()?;
+    let mut best: Option<(PathBuf, Ps3TrophySet)> = None;
+    for entry in entries.filter_map(Result::ok) {
+        let folder = entry.path();
+        if !folder.is_dir() {
+            continue;
+        }
+        let sfm = folder.join("TROPCONF.SFM");
+        if !sfm.is_file() {
+            continue;
+        }
+        let Some(set) = parse_tropconf(&sfm) else {
+            continue;
+        };
+        let candidate = normalize_match_title(&set.title);
+        if candidate.is_empty() {
+            continue;
+        }
+        let exact = candidate == target;
+        let contains =
+            candidate.contains(&target) || target.contains(&candidate);
+        if exact {
+            return Some((folder, set));
+        }
+        if contains && best.is_none() {
+            best = Some((folder, set));
+        }
+    }
+    best
+}
+
+fn list_trophy_set_titles(trophy_root: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(trophy_root) else {
+        return Vec::new();
+    };
+    let mut titles = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let folder = entry.path();
+        let sfm = folder.join("TROPCONF.SFM");
+        if !sfm.is_file() {
+            continue;
+        }
+        if let Some(set) = parse_tropconf(&sfm) {
+            if !set.title.is_empty() {
+                titles.push(set.title);
+            }
+        }
+    }
+    titles.sort();
+    titles.dedup();
+    titles
+}
+
+fn ps3_link_for_game(
+    app: &AppHandle,
+    game_title: &str,
+) -> Result<RetroAchievementsLink, String> {
+    let settings = read_settings_from_disk(app)?;
+    let trophy_root = detect_rpcs3_trophy_root(&settings).ok_or_else(|| {
+        "RPCS3 trophy folder not found. Run Scan RPCS3 Games first so the launcher knows where dev_hdd0 is.".to_string()
+    })?;
+    let (folder, set) = find_trophy_folder_for_game(&trophy_root, game_title)
+        .ok_or_else(|| {
+            let titles = list_trophy_set_titles(&trophy_root);
+            if titles.is_empty() {
+                format!(
+                    "No trophy sets found under {}.",
+                    trophy_root.display()
+                )
+            } else {
+                format!(
+                    "No trophy set matched \"{}\". Available: {}",
+                    game_title,
+                    titles.join(", ")
+                )
+            }
+        })?;
+    let earned = {
+        let usr = folder.join("TROPUSR.DAT");
+        if usr.is_file() {
+            parse_tropusr_earned(&usr)
+        } else {
+            HashMap::new()
+        }
+    };
+    build_ps3_trophy_link(app, &folder, &set, &earned)
+}
+
+#[tauri::command]
+fn ps3_trophies_link_game(app: AppHandle, game_id: String) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    if library.games[idx].platform.as_deref() != Some("ps3") {
+        return Err("Only PS3 games can link trophies.".to_string());
+    }
+    let title = library.games[idx].title.clone();
+    let link = ps3_link_for_game(&app, &title)?;
+    library.games[idx].ps3_trophies = Some(link);
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+#[tauri::command]
+fn ps3_trophies_refresh(app: AppHandle, game_id: String) -> Result<Library, String> {
+    ps3_trophies_link_game(app, game_id)
+}
+
+#[tauri::command]
+fn ps3_trophies_unlink(app: AppHandle, game_id: String) -> Result<Library, String> {
+    let mut library = read_library_from_disk(&app)?;
+    let idx = library
+        .games
+        .iter()
+        .position(|game| game.id == game_id)
+        .ok_or_else(|| "Game not found.".to_string())?;
+    library.games[idx].ps3_trophies = None;
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
+struct Ps3TrophyDef {
+    id: u32,
+    hidden: bool,
+    ttype: String,
+    name: String,
+    detail: String,
+}
+
+struct Ps3TrophySet {
+    np_comm_id: String,
+    title: String,
+    trophies: Vec<Ps3TrophyDef>,
+}
+
+fn parse_sfm_attr(header: &str, attr: &str) -> Option<String> {
+    let needle = format!("{attr}=\"");
+    let start = header.find(&needle)? + needle.len();
+    let end = header[start..].find('"')?;
+    Some(header[start..start + end].to_string())
+}
+
+fn parse_tropconf(path: &Path) -> Option<Ps3TrophySet> {
+    let text = fs::read_to_string(path).ok()?;
+    let title = extract_xml_text(&text, "title-name").unwrap_or_default();
+    let np_comm_id = extract_xml_text(&text, "npcommid").unwrap_or_default();
+
+    let mut trophies = Vec::new();
+    let mut cursor = 0;
+    while let Some(rel_open) = text[cursor..].find("<trophy ") {
+        let abs_open = cursor + rel_open;
+        let Some(rel_open_end) = text[abs_open..].find('>') else {
+            break;
+        };
+        let abs_open_end = abs_open + rel_open_end;
+        let header_str = &text[abs_open..=abs_open_end];
+        let body_start = abs_open_end + 1;
+        let Some(rel_close) = text[body_start..].find("</trophy>") else {
+            break;
+        };
+        let abs_close = body_start + rel_close;
+        let body = &text[body_start..abs_close];
+
+        let id = parse_sfm_attr(header_str, "id")
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+        let hidden = parse_sfm_attr(header_str, "hidden")
+            .map(|s| s == "yes")
+            .unwrap_or(false);
+        let ttype = parse_sfm_attr(header_str, "ttype").unwrap_or_else(|| "B".to_string());
+        let name = extract_xml_text(body, "name").unwrap_or_default();
+        let detail = extract_xml_text(body, "detail").unwrap_or_default();
+
+        trophies.push(Ps3TrophyDef {
+            id,
+            hidden,
+            ttype,
+            name,
+            detail,
+        });
+        cursor = abs_close + "</trophy>".len();
+    }
+
+    Some(Ps3TrophySet {
+        np_comm_id,
+        title,
+        trophies,
+    })
+}
+
+fn parse_tropusr_earned(path: &Path) -> HashMap<u32, bool> {
+    let mut map = HashMap::new();
+    let Ok(bytes) = fs::read(path) else {
+        return map;
+    };
+    if bytes.len() < 48 || bytes[0..4] != [0x81, 0x8F, 0x54, 0xAD] {
+        return map;
+    }
+    let tables_count =
+        u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+    let header_size = 48usize;
+    let table_header_size = 32usize;
+
+    for t in 0..tables_count {
+        let off = header_size + t * table_header_size;
+        if off + table_header_size > bytes.len() {
+            break;
+        }
+        let tag =
+            u32::from_be_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]);
+        if tag != 4 {
+            continue;
+        }
+        let ent_size = u32::from_be_bytes([
+            bytes[off + 4],
+            bytes[off + 5],
+            bytes[off + 6],
+            bytes[off + 7],
+        ]) as usize;
+        let entry_count = u32::from_be_bytes([
+            bytes[off + 12],
+            bytes[off + 13],
+            bytes[off + 14],
+            bytes[off + 15],
+        ]) as usize;
+        let data_off = u64::from_be_bytes([
+            bytes[off + 16],
+            bytes[off + 17],
+            bytes[off + 18],
+            bytes[off + 19],
+            bytes[off + 20],
+            bytes[off + 21],
+            bytes[off + 22],
+            bytes[off + 23],
+        ]) as usize;
+
+        let stride = ent_size + 16;
+        for i in 0..entry_count {
+            let e = data_off + i * stride;
+            if e + 28 > bytes.len() {
+                break;
+            }
+            let trophy_id = u32::from_be_bytes([
+                bytes[e + 8],
+                bytes[e + 9],
+                bytes[e + 10],
+                bytes[e + 11],
+            ]);
+            let earned_marker = u32::from_be_bytes([
+                bytes[e + 24],
+                bytes[e + 25],
+                bytes[e + 26],
+                bytes[e + 27],
+            ]);
+            map.insert(trophy_id, earned_marker != 0xFFFFFFFF);
+        }
+    }
+    map
+}
+
+fn ps3_trophy_points(ttype: &str) -> u32 {
+    match ttype {
+        "P" => 180,
+        "G" => 90,
+        "S" => 30,
+        _ => 15,
+    }
+}
+
+fn ps3_trophy_cache_dir(app: &AppHandle, np_comm_id: &str) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Unable to resolve cache dir: {error}"))?;
+    let dir = base.join("cache").join("ps3_trophies").join(np_comm_id);
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("Unable to create cache dir: {error}"))?;
+    Ok(dir)
+}
+
+fn copy_trophy_icon(
+    src_dir: &Path,
+    cache_dir: &Path,
+    trophy_id: u32,
+) -> Option<String> {
+    let src = src_dir.join(format!("TROP{:03}.PNG", trophy_id));
+    if !src.is_file() {
+        return None;
+    }
+    let dest = cache_dir.join(format!("TROP{:03}.PNG", trophy_id));
+    if !dest.is_file() {
+        if let Err(error) = fs::copy(&src, &dest) {
+            eprintln!("copy trophy icon {} -> {}: {error}", src.display(), dest.display());
+            return None;
+        }
+    }
+    let kind = ArtworkKind::Badge;
+    let bytes = fs::read(&dest).ok()?;
+    let _ = save_bytes_as_webp(&bytes, &dest, kind);
+    let webp = dest.with_extension("webp");
+    if webp.is_file() {
+        Some(webp.to_string_lossy().to_string())
+    } else {
+        Some(dest.to_string_lossy().to_string())
+    }
+}
+
+fn build_ps3_trophy_link(
+    app: &AppHandle,
+    folder: &Path,
+    set: &Ps3TrophySet,
+    earned: &HashMap<u32, bool>,
+) -> Result<RetroAchievementsLink, String> {
+    let cache_dir = ps3_trophy_cache_dir(app, &set.np_comm_id)?;
+    let now = Utc::now().to_rfc3339();
+
+    let mut achievements: Vec<Achievement> = Vec::with_capacity(set.trophies.len());
+    let mut earned_count: u32 = 0;
+    let mut points_total: u32 = 0;
+    let mut points_earned: u32 = 0;
+
+    for trophy in &set.trophies {
+        let badge_path = copy_trophy_icon(folder, &cache_dir, trophy.id);
+        let points = ps3_trophy_points(&trophy.ttype);
+        points_total += points;
+        let is_earned = *earned.get(&trophy.id).unwrap_or(&false);
+        let earned_date = if is_earned {
+            earned_count += 1;
+            points_earned += points;
+            Some(now.clone())
+        } else {
+            None
+        };
+        let title = if trophy.hidden && !is_earned {
+            "Hidden Trophy".to_string()
+        } else {
+            trophy.name.clone()
+        };
+        let description = if trophy.hidden && !is_earned {
+            String::new()
+        } else {
+            trophy.detail.clone()
+        };
+        achievements.push(Achievement {
+            id: trophy.id,
+            title,
+            description,
+            points,
+            badge_url: format!("[{}]", trophy.ttype),
+            badge_locked_url: format!("[{}]", trophy.ttype),
+            badge_path: badge_path.clone(),
+            badge_locked_path: badge_path,
+            earned_date,
+            display_order: trophy.id,
+        });
+    }
+
+    Ok(RetroAchievementsLink {
+        game_id: 0,
+        title: set.title.clone(),
+        console_id: 0,
+        console_name: "PS3".to_string(),
+        icon_path: None,
+        icon_url: None,
+        box_art_url: None,
+        title_url: None,
+        ingame_url: None,
+        achievements_total: set.trophies.len() as u32,
+        achievements_earned: earned_count,
+        points_total,
+        points_earned,
+        achievements,
+        last_synced_at: Some(now),
+    })
+}
+
+fn normalize_match_title(title: &str) -> String {
+    title
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 #[tauri::command]
@@ -2989,6 +3426,9 @@ pub fn run() {
             scan_emudeck_roms,
             scan_rpcs3_games,
             scan_steam_library,
+            ps3_trophies_link_game,
+            ps3_trophies_refresh,
+            ps3_trophies_unlink,
             steam_achievements_link_game,
             steam_achievements_refresh,
             steam_achievements_unlink,

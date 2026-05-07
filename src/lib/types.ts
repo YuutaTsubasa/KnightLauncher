@@ -71,6 +71,7 @@ export type Game = {
   preferredAchievementVariantId: string | null;
   steamAppId: string | null;
   steamAchievements: RetroAchievementsLink | null;
+  ps3Trophies: RetroAchievementsLink | null;
 };
 
 export type GameLibrary = {
@@ -99,6 +100,7 @@ export type AppSettings = {
   steamRoot: string | null;
   steamUserId: string | null;
   rpcs3GamesRoot: string | null;
+  rpcs3TrophyRoot: string | null;
 };
 
 export type SteamGridDbGame = {

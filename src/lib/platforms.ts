@@ -17,6 +17,7 @@ import ggSymbol from '../assets/platforms/GG.png';
 import ngpcSymbol from '../assets/platforms/ngpc.png';
 import psxSymbol from '../assets/platforms/psx.png';
 import ps2Symbol from '../assets/platforms/ps2.png';
+import ps3Symbol from '../assets/platforms/ps3.png';
 import pspSymbol from '../assets/platforms/psp.png';
 import vitaSymbol from '../assets/platforms/vita.png';
 import androidSymbol from '../assets/platforms/android.png';
@@ -192,6 +193,13 @@ export const PLATFORMS: Platform[] = [
     icon: { kind: 'png', src: ps2Symbol }
   },
   {
+    id: 'ps3',
+    label: 'PlayStation 3',
+    color1: '#1F2530',
+    color2: '#3B4456',
+    icon: { kind: 'png', src: ps3Symbol }
+  },
+  {
     id: 'psp',
     label: 'PSP',
     color1: '#D940DC',
@@ -309,6 +317,8 @@ const aliasMap: Record<string, string> = {
   'playstation 1': 'ps1',
   ps2: 'ps2',
   'playstation 2': 'ps2',
+  ps3: 'ps3',
+  'playstation 3': 'ps3',
   psp: 'psp',
   'playstation portable': 'psp',
   vita: 'vita',

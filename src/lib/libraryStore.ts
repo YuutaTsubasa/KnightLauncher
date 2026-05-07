@@ -29,6 +29,9 @@ import {
   steamAchievementsLinkGame,
   steamAchievementsRefresh,
   steamAchievementsUnlink,
+  ps3TrophiesLinkGame,
+  ps3TrophiesRefresh,
+  ps3TrophiesUnlink,
   swapGamePositions,
   upsertGame
 } from './tauri';
@@ -381,6 +384,9 @@ export function effectiveAchievements(game: Game): RetroAchievementsLink | null 
   if (game.steamAchievements) {
     return game.steamAchievements;
   }
+  if (game.ps3Trophies) {
+    return game.ps3Trophies;
+  }
   if (game.preferredAchievementVariantId) {
     const preferred = game.variants.find((variant) => variant.id === game.preferredAchievementVariantId);
     if (preferred?.retroAchievements) {
@@ -437,6 +443,56 @@ export async function unlinkSteamAchievementsAction(gameId: string) {
   errorMessage.set(null);
   try {
     const library = await steamAchievementsUnlink(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function linkPs3TrophiesAction(gameId: string) {
+  busyLabel.set('Linking PS3 trophies');
+  errorMessage.set(null);
+  try {
+    const library = await ps3TrophiesLinkGame(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+    throw error;
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function refreshPs3TrophiesAction(gameId: string) {
+  errorMessage.set(null);
+  try {
+    const library = await ps3TrophiesRefresh(gameId);
+    games.set(library.games);
+    selectedId.set(gameId);
+    const refreshed = library.games.find((entry) => entry.id === gameId);
+    if (refreshed) {
+      const current = get(showingAchievementsFor);
+      if (current && current.id === gameId) {
+        showingAchievementsFor.set(refreshed);
+      }
+    }
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  }
+}
+
+export async function unlinkPs3TrophiesAction(gameId: string) {
+  busyLabel.set('Unlinking PS3 trophies');
+  errorMessage.set(null);
+  try {
+    const library = await ps3TrophiesUnlink(gameId);
     games.set(library.games);
     selectedId.set(gameId);
     notifyLibraryChanged().catch(() => {});

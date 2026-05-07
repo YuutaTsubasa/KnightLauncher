@@ -80,7 +80,9 @@
     pickingVariantsFor,
     query,
     refreshLibraryPreservingSelection,
+    linkPs3TrophiesAction,
     linkSteamAchievementsAction,
+    refreshPs3TrophiesAction,
     refreshRetroAchievements,
     refreshSteamAchievementsAction,
     refreshVariantRetroAchievements,
@@ -100,6 +102,7 @@
     swapSelectedWith,
     toggleFavorite,
     toggleHiddenForSelected,
+    unlinkPs3TrophiesAction,
     unlinkRetroAchievements,
     unlinkSteamAchievementsAction,
     unlinkVariantRetroAchievements
@@ -135,6 +138,8 @@
   let raLinkTarget: RaLinkTarget = { kind: 'game' };
   let steamBusy: string | null = null;
   let steamError: string | null = null;
+  let ps3Busy: string | null = null;
+  let ps3Error: string | null = null;
 
   const FILTER_ORDER: LibraryFilter[] = ['all', 'favorites', 'recent', 'hidden'];
   const SORT_ORDER: SortMode[] = ['title', 'recent', 'playCount', 'manual'];
@@ -893,6 +898,57 @@
       steamError = String(error);
     } finally {
       steamBusy = null;
+    }
+  }
+
+  async function linkPs3TrophiesForGame() {
+    if (!editingGame) return;
+    ps3Busy = 'Linking PS3 trophies';
+    ps3Error = null;
+    try {
+      await linkPs3TrophiesAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      ps3Error = String(error);
+    } finally {
+      ps3Busy = null;
+    }
+  }
+
+  async function refreshPs3TrophiesForGame() {
+    if (!editingGame) return;
+    ps3Busy = 'Refreshing PS3 trophies';
+    ps3Error = null;
+    try {
+      await refreshPs3TrophiesAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      ps3Error = String(error);
+    } finally {
+      ps3Busy = null;
+    }
+  }
+
+  async function unlinkPs3TrophiesForGame() {
+    if (!editingGame) return;
+    ps3Busy = 'Unlinking PS3 trophies';
+    ps3Error = null;
+    try {
+      await unlinkPs3TrophiesAction(editingGame.id);
+      const linked = get(selectedGame);
+      if (linked && linked.id === editingGame.id) {
+        editingGame = { ...linked, tags: [...linked.tags] };
+      }
+    } catch (error) {
+      ps3Error = String(error);
+    } finally {
+      ps3Busy = null;
     }
   }
 
@@ -1946,6 +2002,53 @@
                 </div>
                 <small class="merge-hint">
                   Pulls from your public Steam profile (no API key). Refreshes automatically when you come back to the launcher after playing.
+                </small>
+              {/if}
+            </div>
+          {/if}
+
+          {#if editingGame.platform === 'ps3'}
+            <div class="wide ra-section">
+              <div class="ra-heading">
+                <span>PS3 Trophies</span>
+                <strong>From RPCS3 local trophy folder</strong>
+              </div>
+
+              {#if ps3Busy}
+                <div class="artwork-message">{ps3Busy}</div>
+              {/if}
+              {#if ps3Error}
+                <div class="artwork-message error">{ps3Error}</div>
+              {/if}
+
+              {#if editingGame.ps3Trophies}
+                {@const link = editingGame.ps3Trophies}
+                <div class="ra-link">
+                  <strong>{link.title || 'PS3'}</strong>
+                  <small>{link.achievementsEarned} / {link.achievementsTotal} earned · {link.pointsEarned} / {link.pointsTotal} pts</small>
+                  {#if link.lastSyncedAt}
+                    <small>Last synced {new Date(link.lastSyncedAt).toLocaleString()}</small>
+                  {/if}
+                  <div class="path-row">
+                    <button type="button" on:click={refreshPs3TrophiesForGame}>
+                      <RefreshCw size={14} />
+                      Refresh
+                    </button>
+                    <button type="button" on:click={unlinkPs3TrophiesForGame}>
+                      <Unlink size={14} />
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              {:else}
+                <div class="path-row">
+                  <button type="button" on:click={linkPs3TrophiesForGame}>
+                    <Trophy size={14} />
+                    Link PS3 trophies
+                  </button>
+                </div>
+                <small class="merge-hint">
+                  Auto-detects the trophy folder from your RPCS3 install and matches by game title.
                 </small>
               {/if}
             </div>

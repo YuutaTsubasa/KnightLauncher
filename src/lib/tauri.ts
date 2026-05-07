@@ -26,7 +26,8 @@ export async function loadSettings(): Promise<AppSettings> {
       retroAchievementsApiKey: null,
       steamRoot: null,
       steamUserId: null,
-      rpcs3GamesRoot: null
+      rpcs3GamesRoot: null,
+      rpcs3TrophyRoot: null
     };
   }
   return invoke<AppSettings>('load_settings');
@@ -105,6 +106,21 @@ export async function steamAchievementsRefresh(gameId: string): Promise<GameLibr
 export async function steamAchievementsUnlink(gameId: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('steam_achievements_unlink', { gameId });
+}
+
+export async function ps3TrophiesLinkGame(gameId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('ps3_trophies_link_game', { gameId });
+}
+
+export async function ps3TrophiesRefresh(gameId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('ps3_trophies_refresh', { gameId });
+}
+
+export async function ps3TrophiesUnlink(gameId: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('ps3_trophies_unlink', { gameId });
 }
 
 export async function launchGame(id: string): Promise<GameLibrary> {
@@ -267,7 +283,8 @@ const demoGames: Game[] = [
     hidden: false,
     preferredAchievementVariantId: null,
     steamAppId: null,
-    steamAchievements: null
+    steamAchievements: null,
+    ps3Trophies: null
   },
   {
     id: 'demo-hades',
@@ -291,7 +308,8 @@ const demoGames: Game[] = [
     hidden: false,
     preferredAchievementVariantId: null,
     steamAppId: null,
-    steamAchievements: null
+    steamAchievements: null,
+    ps3Trophies: null
   },
   {
     id: 'demo-cyberpunk',
@@ -315,6 +333,7 @@ const demoGames: Game[] = [
     hidden: false,
     preferredAchievementVariantId: null,
     steamAppId: null,
-    steamAchievements: null
+    steamAchievements: null,
+    ps3Trophies: null
   }
 ];
