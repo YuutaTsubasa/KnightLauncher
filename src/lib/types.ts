@@ -98,6 +98,7 @@ export type AppSettings = {
   retroAchievementsApiKey: string | null;
   steamRoot: string | null;
   steamUserId: string | null;
+  rpcs3GamesRoot: string | null;
 };
 
 export type SteamGridDbGame = {

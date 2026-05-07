@@ -9,6 +9,7 @@
     BatteryLow,
     BatteryMedium,
     Clock,
+    Disc3,
     Eye,
     EyeOff,
     Filter,
@@ -88,6 +89,7 @@
     saveGameEdits,
     scanForGames,
     scanForRoms,
+    scanForRpcs3,
     scanForSteam,
     selectedGame,
     selectedId,
@@ -1309,6 +1311,9 @@
           </button>
           <button title="Scan EmuDeck ROMs" on:click={scanForRoms} disabled={!!$busyLabel}>
             <Joystick size={18} />
+          </button>
+          <button title="Scan RPCS3 games (pick dev_hdd0/game)" on:click={scanForRpcs3} disabled={!!$busyLabel}>
+            <Disc3 size={18} />
           </button>
           <button title="Scan Steam library" on:click={scanForSteam} disabled={!!$busyLabel}>
             <LibraryBig size={18} />

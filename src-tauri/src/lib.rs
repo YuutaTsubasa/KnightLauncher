@@ -132,6 +132,8 @@ pub struct AppSettings {
     pub steam_root: Option<String>,
     #[serde(default)]
     pub steam_user_id: Option<String>,
+    #[serde(default)]
+    pub rpcs3_games_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -310,7 +312,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.41")
+        .user_agent("KnightLauncher/0.1.42")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -518,7 +520,7 @@ const EMU_SYSTEMS: &[EmuSystem] = &[
     EmuSystem { folder: "mastersystem", platform_id: "sms", extensions: &["sms"], launchers: &["retroarch"], retroarch_core: Some("genesis_plus_gx_libretro.dll") },
     EmuSystem { folder: "psx", platform_id: "ps1", extensions: &["chd", "cue", "iso", "pbp", "m3u", "ecm"], launchers: &["duckstation", "retroarch"], retroarch_core: Some("swanstation_libretro.dll") },
     EmuSystem { folder: "ps2", platform_id: "ps2", extensions: &["iso", "chd", "bin", "mdf"], launchers: &["pcsx2"], retroarch_core: None },
-    EmuSystem { folder: "ps3", platform_id: "ps3", extensions: &["iso", "pkg", "rap"], launchers: &["rpcs3"], retroarch_core: None },
+    EmuSystem { folder: "ps3", platform_id: "ps3", extensions: &["iso"], launchers: &["rpcs3"], retroarch_core: None },
     EmuSystem { folder: "ps4", platform_id: "ps4", extensions: &["pkg", "iso"], launchers: &["shadps4"], retroarch_core: None },
     EmuSystem { folder: "psp", platform_id: "psp", extensions: &["iso", "cso", "pbp"], launchers: &["PPSSPP"], retroarch_core: None },
     EmuSystem { folder: "psvita", platform_id: "vita", extensions: &["vpk"], launchers: &["Vita3K"], retroarch_core: None },
@@ -1574,6 +1576,7 @@ fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, S
         retro_achievements_api_key: normalize_optional_secret(settings.retro_achievements_api_key),
         steam_root: normalize_optional_secret(settings.steam_root),
         steam_user_id: normalize_optional_secret(settings.steam_user_id),
+        rpcs3_games_root: normalize_optional_secret(settings.rpcs3_games_root),
     };
     write_settings_to_disk(&app, &settings)?;
     Ok(settings)
@@ -2581,6 +2584,158 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
     Ok(library)
 }
 
+fn read_param_sfo_title(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    if bytes.len() < 20 || &bytes[0..4] != b"\0PSF" {
+        return None;
+    }
+    let key_table_start =
+        u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+    let data_table_start =
+        u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]) as usize;
+    let entries =
+        u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize;
+
+    for i in 0..entries {
+        let idx = 20 + i * 16;
+        if idx + 16 > bytes.len() {
+            return None;
+        }
+        let key_offset = u16::from_le_bytes([bytes[idx], bytes[idx + 1]]) as usize;
+        let data_len = u32::from_le_bytes([
+            bytes[idx + 4],
+            bytes[idx + 5],
+            bytes[idx + 6],
+            bytes[idx + 7],
+        ]) as usize;
+        let data_offset = u32::from_le_bytes([
+            bytes[idx + 12],
+            bytes[idx + 13],
+            bytes[idx + 14],
+            bytes[idx + 15],
+        ]) as usize;
+
+        let key_start = key_table_start + key_offset;
+        if key_start >= bytes.len() {
+            continue;
+        }
+        let key_end = bytes[key_start..]
+            .iter()
+            .position(|&b| b == 0)
+            .map(|p| key_start + p)
+            .unwrap_or(bytes.len());
+        let key = std::str::from_utf8(&bytes[key_start..key_end]).ok()?;
+
+        if key == "TITLE" {
+            let data_start = data_table_start + data_offset;
+            let data_end = (data_start + data_len).min(bytes.len());
+            if data_start >= data_end {
+                return None;
+            }
+            let data = &bytes[data_start..data_end];
+            let trimmed_end = data
+                .iter()
+                .rposition(|&b| b != 0)
+                .map(|p| p + 1)
+                .unwrap_or(0);
+            return std::str::from_utf8(&data[..trimmed_end])
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn scan_rpcs3_games(app: AppHandle, root: String) -> Result<Library, String> {
+    let root_path = PathBuf::from(root.trim());
+    if !root_path.is_dir() {
+        return Err(format!(
+            "RPCS3 game folder not found: {}",
+            root_path.display()
+        ));
+    }
+
+    let mut settings = read_settings_from_disk(&app).unwrap_or_default();
+    settings.rpcs3_games_root = Some(root_path.to_string_lossy().to_string());
+    write_settings_to_disk(&app, &settings)?;
+
+    let mut library = read_library_from_disk(&app)?;
+
+    let already_tracked: HashSet<String> = library
+        .games
+        .iter()
+        .flat_map(|game| {
+            game.variants
+                .iter()
+                .map(|variant| variant.rom_path.to_lowercase())
+        })
+        .collect();
+
+    let entries = fs::read_dir(&root_path)
+        .map_err(|error| format!("Unable to read {}: {error}", root_path.display()))?;
+
+    for entry in entries.filter_map(Result::ok) {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let title_id = entry.file_name().to_string_lossy().to_string();
+        let eboot = dir.join("USRDIR").join("EBOOT.BIN");
+        if !eboot.is_file() {
+            continue;
+        }
+        let eboot_str = eboot.to_string_lossy().to_string();
+        if already_tracked.contains(&eboot_str.to_lowercase()) {
+            continue;
+        }
+
+        let sfo = dir.join("PARAM.SFO");
+        let title =
+            read_param_sfo_title(&sfo).unwrap_or_else(|| title_id.clone());
+
+        library.games.push(Game {
+            id: Uuid::new_v4().to_string(),
+            title,
+            executable_path: String::new(),
+            launch_args: String::new(),
+            working_directory: String::new(),
+            cover_image: None,
+            hero_image: None,
+            logo_image: None,
+            favorite: false,
+            last_played_at: None,
+            play_count: 0,
+            description: None,
+            platform: Some("ps3".to_string()),
+            tags: Vec::new(),
+            rom_system: Some("ps3".to_string()),
+            variants: vec![GameVariant {
+                id: Uuid::new_v4().to_string(),
+                label: title_id.clone(),
+                rom_path: eboot_str,
+                last_played_at: None,
+                play_count: 0,
+                retro_achievements: None,
+            }],
+            retro_achievements: None,
+            position: 0,
+            hidden: false,
+            preferred_achievement_variant_id: None,
+            steam_app_id: None,
+            steam_achievements: None,
+        });
+    }
+
+    ensure_positions(&mut library);
+    library
+        .games
+        .sort_by_key(|game| game.title.to_lowercase());
+    write_library_to_disk(&app, &library)?;
+    Ok(library)
+}
+
 #[tauri::command]
 fn launch_rom_variant(
     app: AppHandle,
@@ -2832,6 +2987,7 @@ pub fn run() {
             select_folder,
             scan_folder,
             scan_emudeck_roms,
+            scan_rpcs3_games,
             scan_steam_library,
             steam_achievements_link_game,
             steam_achievements_refresh,

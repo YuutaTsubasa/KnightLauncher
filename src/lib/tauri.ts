@@ -25,7 +25,8 @@ export async function loadSettings(): Promise<AppSettings> {
       retroAchievementsUser: null,
       retroAchievementsApiKey: null,
       steamRoot: null,
-      steamUserId: null
+      steamUserId: null,
+      rpcs3GamesRoot: null
     };
   }
   return invoke<AppSettings>('load_settings');
@@ -79,6 +80,11 @@ export async function scanFolder(path: string): Promise<Game[]> {
 export async function scanEmudeckRoms(root: string): Promise<GameLibrary> {
   if (!isTauri) return { games: demoGames };
   return invoke<GameLibrary>('scan_emudeck_roms', { root });
+}
+
+export async function scanRpcs3Games(root: string): Promise<GameLibrary> {
+  if (!isTauri) return { games: demoGames };
+  return invoke<GameLibrary>('scan_rpcs3_games', { root });
 }
 
 export async function scanSteamLibrary(steamRoot: string | null): Promise<GameLibrary> {

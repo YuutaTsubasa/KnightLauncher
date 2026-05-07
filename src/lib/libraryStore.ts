@@ -19,6 +19,7 @@ import {
   saveLibrary,
   scanEmudeckRoms,
   scanFolder,
+  scanRpcs3Games,
   scanSteamLibrary,
   selectExecutable,
   selectFolder,
@@ -512,6 +513,25 @@ export async function scanForRoms() {
     if (!folder) return;
 
     const library = await scanEmudeckRoms(folder);
+    games.set(library.games);
+    selectedId.set(library.games[0]?.id ?? null);
+    notifyLibraryChanged().catch(() => {});
+  } catch (error) {
+    errorMessage.set(String(error));
+  } finally {
+    busyLabel.set(null);
+  }
+}
+
+export async function scanForRpcs3() {
+  busyLabel.set('Scanning RPCS3 games');
+  errorMessage.set(null);
+
+  try {
+    const folder = await selectFolder();
+    if (!folder) return;
+
+    const library = await scanRpcs3Games(folder);
     games.set(library.games);
     selectedId.set(library.games[0]?.id ?? null);
     notifyLibraryChanged().catch(() => {});
