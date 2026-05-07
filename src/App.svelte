@@ -2007,7 +2007,7 @@
             </div>
           {/if}
 
-          {#if editingGame.platform === 'ps3'}
+          {#if resolvePlatform(editingGame.platform).id === 'ps3'}
             <div class="wide ra-section">
               <div class="ra-heading">
                 <span>PS3 Trophies</span>

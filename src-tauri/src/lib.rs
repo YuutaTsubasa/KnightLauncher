@@ -316,7 +316,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.44")
+        .user_agent("KnightLauncher/0.1.45")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -2882,7 +2882,7 @@ fn ps3_trophies_link_game(app: AppHandle, game_id: String) -> Result<Library, St
         .iter()
         .position(|game| game.id == game_id)
         .ok_or_else(|| "Game not found.".to_string())?;
-    if library.games[idx].platform.as_deref() != Some("ps3") {
+    if !is_ps3_platform(library.games[idx].platform.as_deref()) {
         return Err("Only PS3 games can link trophies.".to_string());
     }
     let title = library.games[idx].title.clone();
@@ -3081,6 +3081,19 @@ fn parse_tropusr_state(path: &Path) -> HashMap<u32, TropUsrState> {
         }
     }
     map
+}
+
+fn is_ps3_platform(platform: Option<&str>) -> bool {
+    let Some(p) = platform else {
+        return false;
+    };
+    let normalized: String = p
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    matches!(normalized.as_str(), "ps3" | "playstation3")
 }
 
 fn ps3_trophy_points(ttype: &str) -> u32 {
