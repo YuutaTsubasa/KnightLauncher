@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, NaiveDate, TimeZone, Utc};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -316,7 +316,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.43")
+        .user_agent("KnightLauncher/0.1.44")
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -2866,7 +2866,7 @@ fn ps3_link_for_game(
     let earned = {
         let usr = folder.join("TROPUSR.DAT");
         if usr.is_file() {
-            parse_tropusr_earned(&usr)
+            parse_tropusr_state(&usr)
         } else {
             HashMap::new()
         }
@@ -2979,7 +2979,25 @@ fn parse_tropconf(path: &Path) -> Option<Ps3TrophySet> {
     })
 }
 
-fn parse_tropusr_earned(path: &Path) -> HashMap<u32, bool> {
+struct TropUsrState {
+    earned: bool,
+    earned_at: Option<String>,
+}
+
+fn sce_rtc_tick_to_iso(ticks: u64) -> Option<String> {
+    if ticks == 0 {
+        return None;
+    }
+    let secs = (ticks / 1_000_000) as i64;
+    let micros = (ticks % 1_000_000) as i64;
+    let epoch = NaiveDate::from_ymd_opt(1, 1, 1)?.and_hms_opt(0, 0, 0)?;
+    let dt = epoch
+        .checked_add_signed(ChronoDuration::seconds(secs))?
+        .checked_add_signed(ChronoDuration::microseconds(micros))?;
+    Some(Utc.from_utc_datetime(&dt).to_rfc3339())
+}
+
+fn parse_tropusr_state(path: &Path) -> HashMap<u32, TropUsrState> {
     let mut map = HashMap::new();
     let Ok(bytes) = fs::read(path) else {
         return map;
@@ -2999,7 +3017,7 @@ fn parse_tropusr_earned(path: &Path) -> HashMap<u32, bool> {
         }
         let tag =
             u32::from_be_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]]);
-        if tag != 4 {
+        if tag != 6 {
             continue;
         }
         let ent_size = u32::from_be_bytes([
@@ -3028,7 +3046,7 @@ fn parse_tropusr_earned(path: &Path) -> HashMap<u32, bool> {
         let stride = ent_size + 16;
         for i in 0..entry_count {
             let e = data_off + i * stride;
-            if e + 28 > bytes.len() {
+            if e + 0x28 > bytes.len() {
                 break;
             }
             let trophy_id = u32::from_be_bytes([
@@ -3037,13 +3055,29 @@ fn parse_tropusr_earned(path: &Path) -> HashMap<u32, bool> {
                 bytes[e + 10],
                 bytes[e + 11],
             ]);
-            let earned_marker = u32::from_be_bytes([
-                bytes[e + 24],
-                bytes[e + 25],
-                bytes[e + 26],
-                bytes[e + 27],
+            let earned_flag = u32::from_be_bytes([
+                bytes[e + 0x14],
+                bytes[e + 0x15],
+                bytes[e + 0x16],
+                bytes[e + 0x17],
             ]);
-            map.insert(trophy_id, earned_marker != 0xFFFFFFFF);
+            let earned = earned_flag != 0;
+            let earned_at = if earned && e + 0x28 <= bytes.len() {
+                let tick = u64::from_be_bytes([
+                    bytes[e + 0x20],
+                    bytes[e + 0x21],
+                    bytes[e + 0x22],
+                    bytes[e + 0x23],
+                    bytes[e + 0x24],
+                    bytes[e + 0x25],
+                    bytes[e + 0x26],
+                    bytes[e + 0x27],
+                ]);
+                sce_rtc_tick_to_iso(tick)
+            } else {
+                None
+            };
+            map.insert(trophy_id, TropUsrState { earned, earned_at });
         }
     }
     map
@@ -3100,7 +3134,7 @@ fn build_ps3_trophy_link(
     app: &AppHandle,
     folder: &Path,
     set: &Ps3TrophySet,
-    earned: &HashMap<u32, bool>,
+    states: &HashMap<u32, TropUsrState>,
 ) -> Result<RetroAchievementsLink, String> {
     let cache_dir = ps3_trophy_cache_dir(app, &set.np_comm_id)?;
     let now = Utc::now().to_rfc3339();
@@ -3114,11 +3148,12 @@ fn build_ps3_trophy_link(
         let badge_path = copy_trophy_icon(folder, &cache_dir, trophy.id);
         let points = ps3_trophy_points(&trophy.ttype);
         points_total += points;
-        let is_earned = *earned.get(&trophy.id).unwrap_or(&false);
+        let state = states.get(&trophy.id);
+        let is_earned = state.map(|s| s.earned).unwrap_or(false);
         let earned_date = if is_earned {
             earned_count += 1;
             points_earned += points;
-            Some(now.clone())
+            state.and_then(|s| s.earned_at.clone())
         } else {
             None
         };
