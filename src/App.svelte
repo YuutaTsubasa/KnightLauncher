@@ -376,6 +376,9 @@
           const { gameId, variantId } = event.payload;
           const game = get(games).find((entry) => entry.id === gameId);
           if (!game) return;
+          if (game.ps3Trophies) {
+            refreshPs3TrophiesAction(gameId).catch(() => {});
+          }
           if (variantId) {
             const variant = game.variants.find((entry) => entry.id === variantId);
             if (variant?.retroAchievements) {
