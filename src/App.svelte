@@ -246,7 +246,30 @@
     ringWidth = card.offsetWidth;
     ringHeight = card.offsetHeight;
     ringVisible = true;
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    scrollCardIntoView(card);
+  }
+
+  function scrollCardIntoView(card: HTMLElement) {
+    const grid = card.closest('.game-grid') as HTMLElement | null;
+    if (!grid) return;
+    const HALO_TOP = 18;
+    const HALO_BOTTOM = 48;
+    const cardTop = card.offsetTop;
+    const cardBottom = cardTop + card.offsetHeight;
+    const viewTop = grid.scrollTop;
+    const viewBottom = viewTop + grid.clientHeight;
+
+    if (cardTop - HALO_TOP < viewTop) {
+      grid.scrollTo({
+        top: Math.max(0, cardTop - HALO_TOP),
+        behavior: 'smooth'
+      });
+    } else if (cardBottom + HALO_BOTTOM > viewBottom) {
+      grid.scrollTo({
+        top: cardBottom + HALO_BOTTOM - grid.clientHeight,
+        behavior: 'smooth'
+      });
+    }
   }
 
   function handleArrowDirection(direction: ArrowDirection) {
