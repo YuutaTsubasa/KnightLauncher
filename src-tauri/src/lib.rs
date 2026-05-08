@@ -316,7 +316,7 @@ fn steamgriddb_key(app: &AppHandle) -> Result<String, String> {
 fn http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(18))
-        .user_agent("KnightLauncher/0.1.47")
+        .user_agent(concat!("KnightLauncher/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|error| format!("Unable to create HTTP client: {error}"))
 }
@@ -2595,6 +2595,10 @@ fn scan_emudeck_roms(app: AppHandle, root: String) -> Result<Library, String> {
 
 fn read_param_sfo_title(path: &Path) -> Option<String> {
     let bytes = fs::read(path).ok()?;
+    parse_param_sfo_title(&bytes)
+}
+
+fn parse_param_sfo_title(bytes: &[u8]) -> Option<String> {
     if bytes.len() < 20 || &bytes[0..4] != b"\0PSF" {
         return None;
     }
@@ -2933,8 +2937,12 @@ fn parse_sfm_attr(header: &str, attr: &str) -> Option<String> {
 
 fn parse_tropconf(path: &Path) -> Option<Ps3TrophySet> {
     let text = fs::read_to_string(path).ok()?;
-    let title = extract_xml_text(&text, "title-name").unwrap_or_default();
-    let np_comm_id = extract_xml_text(&text, "npcommid").unwrap_or_default();
+    parse_tropconf_str(&text)
+}
+
+fn parse_tropconf_str(text: &str) -> Option<Ps3TrophySet> {
+    let title = extract_xml_text(text, "title-name").unwrap_or_default();
+    let np_comm_id = extract_xml_text(text, "npcommid").unwrap_or_default();
 
     let mut trophies = Vec::new();
     let mut cursor = 0;
@@ -2998,10 +3006,14 @@ fn sce_rtc_tick_to_iso(ticks: u64) -> Option<String> {
 }
 
 fn parse_tropusr_state(path: &Path) -> HashMap<u32, TropUsrState> {
-    let mut map = HashMap::new();
     let Ok(bytes) = fs::read(path) else {
-        return map;
+        return HashMap::new();
     };
+    parse_tropusr_state_bytes(&bytes)
+}
+
+fn parse_tropusr_state_bytes(bytes: &[u8]) -> HashMap<u32, TropUsrState> {
+    let mut map = HashMap::new();
     if bytes.len() < 48 || bytes[0..4] != [0x81, 0x8F, 0x54, 0xAD] {
         return map;
     }
@@ -3507,4 +3519,176 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running KnightLauncher");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_xml_text_strips_cdata_and_trims() {
+        let xml = "<wrap><name><![CDATA[Hello World]]></name></wrap>";
+        assert_eq!(extract_xml_text(xml, "name").as_deref(), Some("Hello World"));
+
+        let plain = "<n>  Plain  </n>";
+        assert_eq!(extract_xml_text(plain, "n").as_deref(), Some("Plain"));
+
+        let missing = "<other>x</other>";
+        assert_eq!(extract_xml_text(missing, "name"), None);
+    }
+
+    #[test]
+    fn sce_rtc_tick_matches_sample_unix_time() {
+        // From references/TROPUSR/TROPUSR.DAT, trophy id=7 unlock tick.
+        let tick: u64 = 0x00e311393dd8e6d4;
+        let iso = sce_rtc_tick_to_iso(tick).expect("tick should decode");
+        // Tick converts to unix seconds 1778160461 (2026-05-07 ~01:27:41 UTC).
+        let dt = chrono::DateTime::parse_from_rfc3339(&iso).expect("rfc3339");
+        assert_eq!(dt.timestamp(), 1778160461);
+
+        assert_eq!(sce_rtc_tick_to_iso(0), None);
+    }
+
+    #[test]
+    fn parse_tropconf_handles_sonic_fighters_sample() {
+        let text =
+            include_str!("../../references/TROPUSR/TROPCONF.SFM");
+        let set = parse_tropconf_str(text).expect("parse SFM");
+        assert_eq!(set.np_comm_id, "NPWR03869_00");
+        assert_eq!(set.title, "Sonic the Fighters");
+        assert_eq!(set.trophies.len(), 12);
+
+        // Trophy 7 is Gold ("Perfect"), 8-11 Silver, 0-6 Bronze.
+        let trophy_7 = set.trophies.iter().find(|t| t.id == 7).expect("id=7");
+        assert_eq!(trophy_7.ttype, "G");
+        assert_eq!(trophy_7.name, "Perfect");
+        assert!(!trophy_7.hidden);
+
+        let bronze_count = set.trophies.iter().filter(|t| t.ttype == "B").count();
+        let silver_count = set.trophies.iter().filter(|t| t.ttype == "S").count();
+        let gold_count = set.trophies.iter().filter(|t| t.ttype == "G").count();
+        assert_eq!(bronze_count, 7);
+        assert_eq!(silver_count, 4);
+        assert_eq!(gold_count, 1);
+    }
+
+    #[test]
+    fn parse_tropusr_state_marks_only_earned_trophies() {
+        let bytes =
+            include_bytes!("../../references/TROPUSR/TROPUSR.DAT");
+        let states = parse_tropusr_state_bytes(bytes);
+        assert_eq!(states.len(), 12);
+
+        // Sample has trophy 7 earned, all others unearned.
+        let earned: Vec<u32> = (0..12)
+            .filter(|id| states.get(id).map(|s| s.earned).unwrap_or(false))
+            .collect();
+        assert_eq!(earned, vec![7]);
+
+        let trophy_7 = &states[&7];
+        assert!(trophy_7.earned);
+        let iso = trophy_7.earned_at.as_deref().expect("earned_at present");
+        let dt = chrono::DateTime::parse_from_rfc3339(iso).expect("rfc3339");
+        assert_eq!(dt.timestamp(), 1778160461);
+
+        assert!(!states[&0].earned);
+        assert!(states[&0].earned_at.is_none());
+    }
+
+    #[test]
+    fn parse_tropusr_state_rejects_bad_magic() {
+        let bytes = vec![0u8; 64];
+        assert!(parse_tropusr_state_bytes(&bytes).is_empty());
+    }
+
+    #[test]
+    fn parse_steam_achievements_xml_decodes_cdata_and_status() {
+        let xml = r#"<?xml version="1.0"?>
+<playerstats>
+  <game>
+    <gameName><![CDATA[Sample Game]]></gameName>
+    <achievements>
+      <achievement closed="1">
+        <apiname>FIRST</apiname>
+        <name><![CDATA[First Win]]></name>
+        <description><![CDATA[Win a match]]></description>
+        <iconClosed><![CDATA[https://example.test/closed.jpg]]></iconClosed>
+        <iconOpen><![CDATA[https://example.test/open.jpg]]></iconOpen>
+        <unlockTimestamp>1700000000</unlockTimestamp>
+      </achievement>
+      <achievement closed="0">
+        <apiname>SECOND</apiname>
+        <name>Second</name>
+        <description>Lose a match</description>
+        <iconClosed>https://example.test/2c.jpg</iconClosed>
+        <iconOpen>https://example.test/2o.jpg</iconOpen>
+      </achievement>
+    </achievements>
+  </game>
+</playerstats>"#;
+
+        let (game, achievements) =
+            parse_steam_achievements_xml(xml).expect("parse");
+        assert_eq!(game, "Sample Game");
+        assert_eq!(achievements.len(), 2);
+
+        let first = &achievements[0];
+        assert_eq!(first.apiname, "FIRST");
+        assert_eq!(first.name, "First Win");
+        assert_eq!(first.icon_closed, "https://example.test/closed.jpg");
+        assert!(first.closed);
+        assert_eq!(first.unlock_ts, Some(1700000000));
+
+        let second = &achievements[1];
+        assert!(!second.closed);
+        assert_eq!(second.unlock_ts, None);
+    }
+
+    #[test]
+    fn parse_steam_achievements_xml_rejects_private_profile() {
+        let xml = "<error>This profile is private</error>";
+        assert!(parse_steam_achievements_xml(xml).is_err());
+    }
+
+    #[test]
+    fn parse_param_sfo_title_reads_title_field() {
+        // Synthesize a minimal valid PARAM.SFO with one TITLE entry.
+        let key = b"TITLE\0";
+        let value = b"My Test Game\0";
+        let key_table_start: u32 = 20 + 16; // header + 1 index entry
+        let data_table_start: u32 = key_table_start + key.len() as u32;
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"\0PSF");
+        bytes.extend_from_slice(&[1u8, 1, 0, 0]); // version
+        bytes.extend_from_slice(&key_table_start.to_le_bytes());
+        bytes.extend_from_slice(&data_table_start.to_le_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes()); // entry count
+
+        // Index entry (16 bytes): key_offset(u16), data_fmt(u16), data_len(u32),
+        // data_max_len(u32), data_offset(u32)
+        bytes.extend_from_slice(&0u16.to_le_bytes()); // key_offset
+        bytes.extend_from_slice(&0x0204u16.to_le_bytes()); // data_fmt UTF-8 nullterm
+        bytes.extend_from_slice(&(value.len() as u32).to_le_bytes()); // data_len
+        bytes.extend_from_slice(&(value.len() as u32).to_le_bytes()); // data_max
+        bytes.extend_from_slice(&0u32.to_le_bytes()); // data_offset
+
+        bytes.extend_from_slice(key);
+        bytes.extend_from_slice(value);
+
+        assert_eq!(
+            parse_param_sfo_title(&bytes).as_deref(),
+            Some("My Test Game")
+        );
+    }
+
+    #[test]
+    fn is_ps3_platform_normalizes_aliases() {
+        assert!(is_ps3_platform(Some("ps3")));
+        assert!(is_ps3_platform(Some("PS3")));
+        assert!(is_ps3_platform(Some(" PlayStation 3 ")));
+        assert!(is_ps3_platform(Some("playstation3")));
+        assert!(!is_ps3_platform(Some("ps2")));
+        assert!(!is_ps3_platform(None));
+    }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "knightlauncher"
-version = "0.1.47"
+version = "0.1.48"
 description = "A dual-screen Windows handheld launcher."
 authors = ["KnightLauncher"]
 edition = "2021"
