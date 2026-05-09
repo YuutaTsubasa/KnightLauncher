@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::http_client;
+use crate::{http_client, logger};
 
 #[derive(Copy, Clone)]
 pub(crate) enum ArtworkKind {
@@ -106,14 +106,14 @@ fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     let bytes = match fs::read(p) {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("convert_image_path_to_webp read {}: {error}", p.display());
+            logger::warn(format!("convert_image_path_to_webp read {}: {error}", p.display()));
             return None;
         }
     };
     let img = match decode_image_no_limits(&bytes) {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("convert_image_path_to_webp decode {}: {error}", p.display());
+            logger::warn(format!("convert_image_path_to_webp decode {}: {error}", p.display()));
             return None;
         }
     };
@@ -127,7 +127,7 @@ fn convert_image_path_to_webp(path: &str, kind: ArtworkKind) -> Option<String> {
     let saved = match save_bytes_as_webp(&bytes, p, kind) {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("convert_image_path_to_webp save {}: {error}", p.display());
+            logger::warn(format!("convert_image_path_to_webp save {}: {error}", p.display()));
             return None;
         }
     };

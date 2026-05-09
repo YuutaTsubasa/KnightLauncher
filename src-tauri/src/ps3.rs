@@ -301,11 +301,11 @@ fn copy_trophy_icon(src_dir: &Path, cache_dir: &Path, trophy_id: u32) -> Option<
     let dest = cache_dir.join(format!("TROP{:03}.PNG", trophy_id));
     if !dest.is_file() {
         if let Err(error) = fs::copy(&src, &dest) {
-            eprintln!(
+            crate::logger::warn(format!(
                 "copy trophy icon {} -> {}: {error}",
                 src.display(),
                 dest.display()
-            );
+            ));
             return None;
         }
     }

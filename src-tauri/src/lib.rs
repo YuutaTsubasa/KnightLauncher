@@ -19,6 +19,7 @@ use walkdir::WalkDir;
 
 mod artwork;
 mod emudeck;
+mod logger;
 mod ps3;
 mod ra;
 mod steam;
@@ -1389,8 +1390,9 @@ pub fn run() {
         .manage(DisplayAssignment::default())
         .setup(|app| {
             let handle = app.handle().clone();
+            logger::init(&handle);
             if let Err(error) = arrange_dual_windows(&handle, false) {
-                eprintln!("Unable to arrange KnightLauncher windows: {error}");
+                logger::error(format!("Unable to arrange KnightLauncher windows: {error}"));
             }
             Ok(())
         })
@@ -1438,7 +1440,8 @@ pub fn run() {
             steamgriddb_download_artwork,
             google_download_artwork,
             arrange_displays,
-            swap_displays
+            swap_displays,
+            logger::get_log_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running KnightLauncher");

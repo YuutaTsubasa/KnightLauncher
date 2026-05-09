@@ -158,6 +158,11 @@ export async function notifyLibraryChanged(): Promise<void> {
   return emit('library-changed');
 }
 
+export async function getLogPath(): Promise<string | null> {
+  if (!isTauri) return null;
+  return invoke<string | null>('get_log_path');
+}
+
 export async function steamGridDbSearchGames(query: string): Promise<SteamGridDbGame[]> {
   if (!isTauri) {
     return [
