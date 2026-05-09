@@ -338,11 +338,29 @@ const aliasMap: Record<string, string> = {
   'sega cd / mega cd': 'segacd'
 };
 
+const labelToId = new Map(
+  PLATFORMS.map((platform) => [platform.label.toLowerCase(), platform.id])
+);
+
 export function resolvePlatform(name: string | null | undefined): Platform {
   if (!name) return platformById.get('other')!;
   const normalized = name.trim().toLowerCase();
-  const id = aliasMap[normalized] ?? normalized;
+  const id = aliasMap[normalized] ?? labelToId.get(normalized) ?? normalized;
   return platformById.get(id) ?? platformById.get('other')!;
+}
+
+export function canonicalPlatformId(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (platformById.has(lower)) return lower;
+  const labelHit = labelToId.get(lower);
+  if (labelHit) return labelHit;
+  const aliasHit = aliasMap[lower];
+  if (aliasHit) return aliasHit;
+  // Unknown — preserve user's text so custom platform names survive.
+  return trimmed;
 }
 
 export function frameGradient(platform: Platform): string {

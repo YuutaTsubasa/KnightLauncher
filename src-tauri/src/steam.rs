@@ -220,7 +220,7 @@ pub(crate) fn scan_steam_library(
                 last_played_at: None,
                 play_count: 0,
                 description: None,
-                platform: Some("Steam".to_string()),
+                platform: Some("steam".to_string()),
                 tags: Vec::new(),
                 rom_system: None,
                 variants: Vec::new(),

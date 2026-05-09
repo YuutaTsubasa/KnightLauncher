@@ -55,7 +55,7 @@
   } from './lib/tauri';
   import type { Game, RaGameSearchResult, SteamGridDbAsset, SteamGridDbArtwork, SteamGridDbGame } from './lib/types';
   import PlatformBadge from './lib/PlatformBadge.svelte';
-  import { PLATFORMS, frameGradient, isRaSupported, resolvePlatform } from './lib/platforms';
+  import { PLATFORMS, canonicalPlatformId, frameGradient, isRaSupported, resolvePlatform } from './lib/platforms';
   import {
     addExecutable,
     busyLabel,
@@ -1136,7 +1136,7 @@
       heroImage: editingGame.heroImage?.trim() || null,
       logoImage: editingGame.logoImage?.trim() || null,
       description: editingGame.description?.trim() || null,
-      platform: editingGame.platform?.trim() || null,
+      platform: canonicalPlatformId(editingGame.platform),
       tags: editingGame.tags.map((tag) => tag.trim()).filter(Boolean)
     });
     closeEditor();
