@@ -294,10 +294,24 @@ pub(crate) fn read_settings_from_disk(app: &AppHandle) -> Result<AppSettings, St
         .map_err(|error| format!("Unable to parse {}: {error}", path.display()))
 }
 
+fn rotate_backup(path: &Path) {
+    if !path.exists() {
+        return;
+    }
+    let mut backup = path.to_path_buf();
+    let new_ext = match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => format!("{ext}.bak"),
+        None => "bak".to_string(),
+    };
+    backup.set_extension(new_ext);
+    let _ = fs::copy(path, &backup);
+}
+
 pub(crate) fn write_library_to_disk(app: &AppHandle, library: &Library) -> Result<(), String> {
     let path = library_path(app)?;
     let contents = serde_json::to_string_pretty(library)
         .map_err(|error| format!("Unable to serialize library: {error}"))?;
+    rotate_backup(&path);
     fs::write(&path, contents)
         .map_err(|error| format!("Unable to write {}: {error}", path.display()))
 }
@@ -306,6 +320,7 @@ pub(crate) fn write_settings_to_disk(app: &AppHandle, settings: &AppSettings) ->
     let path = settings_path(app)?;
     let contents = serde_json::to_string_pretty(settings)
         .map_err(|error| format!("Unable to serialize settings: {error}"))?;
+    rotate_backup(&path);
     fs::write(&path, contents)
         .map_err(|error| format!("Unable to write {}: {error}", path.display()))
 }
