@@ -569,37 +569,64 @@ fn set_preferred_achievement_variant(
     Ok(library)
 }
 
+fn push_path_if_set(slot: &Option<String>, set: &mut HashSet<PathBuf>) {
+    if let Some(path) = slot {
+        if !path.is_empty() {
+            set.insert(PathBuf::from(path));
+        }
+    }
+}
+
+fn collect_link_paths(link: &RetroAchievementsLink, set: &mut HashSet<PathBuf>) {
+    push_path_if_set(&link.icon_path, set);
+    for achievement in &link.achievements {
+        push_path_if_set(&achievement.badge_path, set);
+        push_path_if_set(&achievement.badge_locked_path, set);
+    }
+}
+
+fn convert_link_to_webp(link: &mut RetroAchievementsLink) {
+    convert_optional_to_webp(&mut link.icon_path, ArtworkKind::Logo);
+    for achievement in link.achievements.iter_mut() {
+        convert_optional_to_webp(&mut achievement.badge_path, ArtworkKind::Badge);
+        convert_optional_to_webp(&mut achievement.badge_locked_path, ArtworkKind::Badge);
+    }
+}
+
 fn collect_referenced_artwork_paths(library: &Library) -> HashSet<PathBuf> {
     let mut keep: HashSet<PathBuf> = HashSet::new();
-    let push = |slot: &Option<String>, set: &mut HashSet<PathBuf>| {
-        if let Some(path) = slot {
-            if !path.is_empty() {
-                set.insert(PathBuf::from(path));
-            }
-        }
-    };
     for game in &library.games {
-        push(&game.cover_image, &mut keep);
-        push(&game.hero_image, &mut keep);
-        push(&game.logo_image, &mut keep);
+        push_path_if_set(&game.cover_image, &mut keep);
+        push_path_if_set(&game.hero_image, &mut keep);
+        push_path_if_set(&game.logo_image, &mut keep);
         if let Some(link) = &game.retro_achievements {
-            push(&link.icon_path, &mut keep);
-            for achievement in &link.achievements {
-                push(&achievement.badge_path, &mut keep);
-                push(&achievement.badge_locked_path, &mut keep);
-            }
+            collect_link_paths(link, &mut keep);
+        }
+        if let Some(link) = &game.steam_achievements {
+            collect_link_paths(link, &mut keep);
+        }
+        if let Some(link) = &game.ps3_trophies {
+            collect_link_paths(link, &mut keep);
         }
         for variant in &game.variants {
             if let Some(link) = &variant.retro_achievements {
-                push(&link.icon_path, &mut keep);
-                for achievement in &link.achievements {
-                    push(&achievement.badge_path, &mut keep);
-                    push(&achievement.badge_locked_path, &mut keep);
-                }
+                collect_link_paths(link, &mut keep);
             }
         }
     }
     keep
+}
+
+fn achievement_cache_roots(app: &AppHandle) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(app_data) = app.path().app_data_dir() {
+        roots.push(app_data.join("retroachievements"));
+        roots.push(app_data.join("steam_achievements"));
+    }
+    if let Ok(local) = app.path().app_local_data_dir() {
+        roots.push(local.join("cache").join("ps3_trophies"));
+    }
+    roots
 }
 
 fn cleanup_orphans_under(dir: &Path, keep: &HashSet<PathBuf>) -> u32 {
@@ -629,9 +656,8 @@ fn cleanup_orphan_artwork(app: AppHandle) -> Result<u32, String> {
     if let Ok(art_dir) = artwork_dir(&app) {
         removed = removed.saturating_add(cleanup_orphans_under(&art_dir, &keep));
     }
-    if let Ok(app_data) = app.path().app_data_dir() {
-        let ra_dir = app_data.join("retroachievements");
-        removed = removed.saturating_add(cleanup_orphans_under(&ra_dir, &keep));
+    for root in achievement_cache_roots(&app) {
+        removed = removed.saturating_add(cleanup_orphans_under(&root, &keep));
     }
     Ok(removed)
 }
@@ -646,41 +672,30 @@ fn convert_library_artwork_to_webp(app: AppHandle) -> Result<Library, String> {
         convert_optional_to_webp(&mut game.logo_image, ArtworkKind::Logo);
 
         if let Some(link) = game.retro_achievements.as_mut() {
-            convert_optional_to_webp(&mut link.icon_path, ArtworkKind::Logo);
-            for achievement in link.achievements.iter_mut() {
-                convert_optional_to_webp(&mut achievement.badge_path, ArtworkKind::Badge);
-                convert_optional_to_webp(
-                    &mut achievement.badge_locked_path,
-                    ArtworkKind::Badge,
-                );
-            }
+            convert_link_to_webp(link);
+        }
+        if let Some(link) = game.steam_achievements.as_mut() {
+            convert_link_to_webp(link);
+        }
+        if let Some(link) = game.ps3_trophies.as_mut() {
+            convert_link_to_webp(link);
         }
 
         for variant in game.variants.iter_mut() {
             if let Some(link) = variant.retro_achievements.as_mut() {
-                convert_optional_to_webp(&mut link.icon_path, ArtworkKind::Logo);
-                for achievement in link.achievements.iter_mut() {
-                    convert_optional_to_webp(&mut achievement.badge_path, ArtworkKind::Badge);
-                    convert_optional_to_webp(
-                        &mut achievement.badge_locked_path,
-                        ArtworkKind::Badge,
-                    );
-                }
+                convert_link_to_webp(link);
             }
         }
     }
 
     write_library_to_disk(&app, &library)?;
 
-    // Sweep any orphans (e.g. duplicated copies left behind by earlier
-    // versions of this command that wrote to a fresh uuid filename).
     let keep = collect_referenced_artwork_paths(&library);
     if let Ok(art_dir) = artwork_dir(&app) {
         cleanup_orphans_under(&art_dir, &keep);
     }
-    if let Ok(app_data) = app.path().app_data_dir() {
-        let ra_dir = app_data.join("retroachievements");
-        cleanup_orphans_under(&ra_dir, &keep);
+    for root in achievement_cache_roots(&app) {
+        cleanup_orphans_under(&root, &keep);
     }
 
     Ok(library)
